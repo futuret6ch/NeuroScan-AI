@@ -675,6 +675,77 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                         <RefreshCw size={20} className="spin-animation" style={{ color: 'var(--accent)' }} />
                         <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>AI Model Inference in progress...</span>
                       </div>
+
+                      {/* Premium Stepper */}
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '10px',
+                        background: 'rgba(0, 0, 0, 0.15)',
+                        padding: '16px',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border)',
+                        margin: '8px 0'
+                      }}>
+                        {['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'].map((step, idx) => {
+                          const currentStep = getStatusStep();
+                          const steps = ['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'];
+                          const currentIdx = steps.indexOf(currentStep);
+                          const stepIdx = idx;
+                          const isCurrent = currentStep === step;
+                          const isPast = stepIdx < currentIdx;
+                          
+                          return (
+                            <div key={idx} style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '10px',
+                              fontSize: '0.825rem',
+                              fontWeight: isCurrent ? 700 : isPast ? 600 : 400,
+                              color: isCurrent 
+                                ? 'var(--primary)' 
+                                : isPast 
+                                  ? 'var(--success)' 
+                                  : 'var(--text-muted)',
+                              transition: 'all 0.3s ease',
+                              opacity: isCurrent || isPast ? 1 : 0.5
+                            }}>
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                width: '22px', 
+                                height: '22px', 
+                                borderRadius: '50%', 
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: `2px solid ${
+                                  isCurrent 
+                                    ? 'var(--primary)' 
+                                    : isPast 
+                                      ? 'var(--success)' 
+                                      : 'var(--border)'
+                                }`,
+                                background: isCurrent 
+                                  ? 'rgba(99, 102, 241, 0.1)' 
+                                  : isPast 
+                                    ? 'rgba(52, 211, 153, 0.1)' 
+                                    : 'transparent',
+                                color: isCurrent 
+                                  ? 'var(--primary)' 
+                                  : isPast 
+                                    ? 'var(--success)' 
+                                    : 'var(--text-muted)',
+                                transition: 'all 0.3s ease'
+                              }}>
+                                {isPast ? '✓' : idx + 1}
+                              </span>
+                              <span>{step}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
                           <span style={{ color: 'var(--primary)' }}>{activeLog}</span>
