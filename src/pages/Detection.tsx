@@ -977,7 +977,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 </div>
                 <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '16px' }}>
                   <span style={{ color: 'rgba(255,255,255,0.6)', display: 'block', fontSize: '0.725rem', textTransform: 'uppercase' }}>Analysis Duration</span>
-                  <span style={{ fontWeight: 700 }}>{scanResult.duration}</span>
+                  <span style={{ fontWeight: 700 }}>{scanResult.analysisTime || scanResult.duration}</span>
                 </div>
                 <div style={{ borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '16px' }}>
                   <span style={{ color: 'rgba(255,255,255,0.6)', display: 'block', fontSize: '0.725rem', textTransform: 'uppercase' }}>Scan ID</span>
@@ -1341,7 +1341,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.725rem' }}>Analysis Time</span>
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{scanResult.duration}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{scanResult.analysisTime || scanResult.duration}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.725rem' }}>Detection Engine</span>
