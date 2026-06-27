@@ -23,12 +23,30 @@ const analyzeController = {
       
       const endTime = performance.now();
       const analysisTimeSec = ((endTime - startTime) / 1000).toFixed(2);
-      
-      // Construct metadata details
       const scanId = `NS-${Math.floor(Math.random() * 90000 + 10000)}-DX`;
       
+      const analysisTime = `${analysisTimeSec}s`;
+      
       const responseData = {
-        ...analysisResult,
+        status: 'success',
+        tumorDetected: analysisResult.hasTumor,
+        tumorType: analysisResult.type,
+        confidence: analysisResult.confidence,
+        recommendation: `${analysisResult.findings} ${analysisResult.recommendation}`,
+        analysisTime,
+        
+        // Frontend compatibility fields
+        hasTumor: analysisResult.hasTumor,
+        type: analysisResult.type,
+        findings: analysisResult.findings,
+        recommendationText: analysisResult.recommendation,
+        location: analysisResult.location,
+        riskLevel: analysisResult.riskLevel,
+        description: analysisResult.description,
+        symptoms: analysisResult.symptoms,
+        nextStep: analysisResult.nextStep,
+        specialist: analysisResult.specialist,
+        
         scanId,
         duration: `${analysisTimeSec} seconds`,
         resolution: '512 × 512',

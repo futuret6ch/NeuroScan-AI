@@ -1,9 +1,8 @@
-const axios = require('axios');
 const config = require('../config/config');
 const logger = require('../utils/logger');
 
 /**
- * Service to manage Roboflow object detection API calls
+ * Service to manage Roboflow object detection API calls using native Fetch API
  */
 const roboflowService = {
   analyzeImage: async (imageBuffer, fileName) => {
@@ -15,15 +14,20 @@ const roboflowService = {
       return simulateInference(fileName);
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15-second timeout
+
     try {
       const url = config.roboflow.workflowUrl;
       
-      logger.info(`Sending image to Roboflow Hosted Workflows API: ${url}`);
+      logger.info(`Sending image to Roboflow Hosted Workflows API (Fetch): ${url}`);
       
-      const response = await axios({
+      const response = await fetch(url, {
         method: 'POST',
-        url: url,
-        data: {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
           api_key: config.roboflow.apiKey,
           inputs: {
             image: {
@@ -31,25 +35,37 @@ const roboflowService = {
               value: base64Image
             }
           }
-        },
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000 // 15-second timeout handling
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = 'Error communicating with Roboflow Hosted Workflows API.';
+        try {
+          const parsedError = JSON.parse(errorText);
+          errorMessage = parsedError.message || parsedError.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const responseData = await response.json();
       logger.info('Roboflow workflow prediction response received successfully.');
-      return parseRoboflowResponse(response.data);
+      return parseRoboflowResponse(responseData);
       
     } catch (error) {
+      clearTimeout(timeoutId);
       logger.error('Roboflow Workflow API inference failed:', error);
       
-      // Handle timeout or network failure by returning fallback diagnostic
-      if (error.code === 'ECONNABORTED') {
+      if (error.name === 'AbortError') {
         throw new Error('Roboflow API connection timed out. Please try again.');
       }
       
-      throw new Error(error.response?.data?.message || 'Error communicating with Roboflow Hosted Workflows API.');
+      throw error;
     }
   }
 };

@@ -49,6 +49,12 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
   const [activeLog, setActiveLog] = useState<string>('');
   const [analysisLogs, setAnalysisLogs] = useState<string[]>([]);
   
+  const [errorDetails, setErrorDetails] = useState<{
+    title: string;
+    message: string;
+    type: 'Network Error' | 'Invalid File' | 'Large File' | 'API Timeout' | 'Roboflow Error' | 'Empty Prediction' | 'Server Error';
+  } | null>(null);
+  
   // Results & Dashboard States
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [animatedConfidence, setAnimatedConfidence] = useState<number>(0);
@@ -204,11 +210,61 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     setAnimatedConfidence(0);
   };
 
-  const uploadAndAnalyzeMRI = (fileToUpload: File) => {
-    setAnalysisStatus('analyzing');
+  const triggerErrorCard = (
+    type: 'Network Error' | 'Invalid File' | 'Large File' | 'API Timeout' | 'Roboflow Error' | 'Empty Prediction' | 'Server Error',
+    message: string
+  ) => {
+    let title = 'Diagnostic Scanning Error';
+    let detailedMessage = message;
+    
+    switch (type) {
+      case 'Network Error':
+        title = 'Network Connection Lost';
+        detailedMessage = 'A network error occurred while transmitting the MRI image. Please verify your local network status or firewall settings and attempt re-transmission.';
+        break;
+      case 'Invalid File':
+        title = 'Invalid Scanned Media Format';
+        detailedMessage = 'The uploaded file does not comply with acceptable DICOM-derived imaging standards. Please verify the file is a valid JPG, JPEG, or PNG image scan.';
+        break;
+      case 'Large File':
+        title = 'Voxel Volume Limit Exceeded';
+        detailedMessage = 'The file exceeds the maximum security size threshold of 10 MB. Please optimize or down-sample the scan resolution before attempting ingestion.';
+        break;
+      case 'API Timeout':
+        title = 'AI Endpoint Ingestion Timeout';
+        detailedMessage = 'The remote Roboflow inference server failed to respond within the allocated timeframe (15s). Please check Roboflow API status or retry your submission.';
+        break;
+      case 'Roboflow Error':
+        title = 'Roboflow Processing Error';
+        detailedMessage = `The AI workflow engine encountered a processing anomaly: "${message}". Please check your workflow API configurations.`;
+        break;
+      case 'Empty Prediction':
+        title = 'Unidentifiable Imaging Data';
+        detailedMessage = 'The model successfully parsed the scan, but returned an empty response. This could indicate corrupted file channels or zero feature matching.';
+        break;
+      case 'Server Error':
+        title = 'Internal Diagnostic Server Exception';
+        detailedMessage = message || 'An unhandled exception occurred in the diagnostic controller. Contact your system administrator or review server console outputs.';
+        break;
+    }
+    
+    setErrorDetails({ title, message: detailedMessage, type });
+    setAnalysisStatus('idle');
     setProgress(0);
-    setActiveLog('Preparing image...');
-    setAnalysisLogs(['Preparing image...']);
+  };
+
+  const loggerError = (msg: string) => {
+    setActiveLog('Error');
+    setAnalysisLogs((prev) => [...prev, `[FAIL] ${msg}`]);
+    triggerErrorCard('Server Error', msg);
+  };
+
+  const uploadAndAnalyzeMRI = (fileToUpload: File) => {
+    setErrorDetails(null);
+    setAnalysisStatus('analyzing');
+    setProgress(5);
+    setActiveLog('Preparing Image...');
+    setAnalysisLogs(['Initializing imaging pipeline...', 'Preparing Image...']);
 
     const xhr = new XMLHttpRequest();
     let analyzeTimer: any;
@@ -216,17 +272,17 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const percentComplete = Math.round((e.loaded / e.total) * 100);
-        // Map upload to 0-40% progress
-        const uploadProgress = Math.round(percentComplete * 0.4);
+        // Map upload to 10-40% progress
+        const uploadProgress = 10 + Math.round(percentComplete * 0.3);
         setProgress(uploadProgress);
         setActiveLog(`Uploading... (${percentComplete}%)`);
         
         if (percentComplete === 100) {
-          setActiveLog('Analyzing...');
+          setActiveLog('Analyzing MRI...');
           setAnalysisLogs((prev) => [
             ...prev,
             'MRI file successfully uploaded to backend secure memory.',
-            'Analyzing features...'
+            'Analyzing MRI...'
           ]);
 
           // Increment mock progress slowly from 40% to 95% while backend processes
@@ -237,20 +293,20 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
               clearInterval(analyzeTimer);
             } else {
               setProgress(mockProgress);
-              if (mockProgress === 55) {
-                setActiveLog('Sending image for AI analysis...');
-                setAnalysisLogs((prev) => [...prev, 'Sending image to Roboflow Serverless API...']);
+              if (mockProgress === 50) {
+                setActiveLog('Analyzing MRI...');
+                setAnalysisLogs((prev) => [...prev, 'Running voxel-level scans...']);
               }
-              if (mockProgress === 72) {
-                setActiveLog('Detecting brain abnormalities...');
-                setAnalysisLogs((prev) => [...prev, 'Running CNN object detection models...']);
+              if (mockProgress === 68) {
+                setActiveLog('Running AI Model...');
+                setAnalysisLogs((prev) => [...prev, 'Invoking Roboflow Hosted Workflows...']);
               }
-              if (mockProgress === 88) {
-                setActiveLog('Finalizing prediction...');
-                setAnalysisLogs((prev) => [...prev, 'Consolidating confidence ratios...']);
+              if (mockProgress === 85) {
+                setActiveLog('Generating Result...');
+                setAnalysisLogs((prev) => [...prev, 'Consolidating diagnostic vectors...']);
               }
             }
-          }, 80);
+          }, 100);
         }
       }
     });
@@ -258,7 +314,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     xhr.addEventListener('load', () => {
       clearInterval(analyzeTimer);
       if (xhr.status >= 200 && xhr.status < 300) {
-        setActiveLog('Receiving Results...');
+        setActiveLog('Generating Result...');
         setAnalysisLogs((prev) => [
           ...prev,
           'Predictions received from server.',
@@ -268,38 +324,63 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
         try {
           const response = JSON.parse(xhr.responseText);
           if (response.success && response.data) {
-            setProgress(100);
+            setProgress(98);
             
-            // Short delay for visual polish of "Receiving Results..."
+            // Short delay for visual polish
             setTimeout(() => {
+              setProgress(100);
               setScanResult(response.data);
               setAnalysisStatus('completed');
-              setAnalysisLogs((prev) => [...prev, 'Diagnosis Complete.']);
-            }, 600);
+              setAnalysisLogs((prev) => [...prev, 'Complete.']);
+            }, 650);
           } else {
             throw new Error(response.error || 'Server returned an invalid result formatting.');
           }
         } catch (err: any) {
-          loggerError(err.message || 'Result rendering failed.');
+          const errMessage = err.message || 'Result rendering failed.';
+          if (errMessage.toLowerCase().includes('empty')) {
+            triggerErrorCard('Empty Prediction', errMessage);
+          } else if (errMessage.toLowerCase().includes('roboflow') || errMessage.toLowerCase().includes('workflow')) {
+            triggerErrorCard('Roboflow Error', errMessage);
+          } else {
+            triggerErrorCard('Server Error', errMessage);
+          }
         }
       } else {
+        let errMessage = 'Server rejected request.';
         try {
           const response = JSON.parse(xhr.responseText);
-          loggerError(response.error || 'Server rejected request.');
-        } catch {
-          loggerError(`Inference request failed with HTTP: ${xhr.status}`);
+          errMessage = response.error || errMessage;
+        } catch {}
+        
+        if (xhr.status === 413 || errMessage.toLowerCase().includes('large') || errMessage.toLowerCase().includes('limit')) {
+          triggerErrorCard('Large File', errMessage);
+        } else if (xhr.status === 429 || errMessage.toLowerCase().includes('rate limit') || errMessage.toLowerCase().includes('too many requests')) {
+          triggerErrorCard('API Timeout', 'Rate limit exceeded. Please try again shortly.');
+        } else if (errMessage.toLowerCase().includes('timeout') || xhr.status === 504) {
+          triggerErrorCard('API Timeout', errMessage);
+        } else if (errMessage.toLowerCase().includes('roboflow') || errMessage.toLowerCase().includes('workflow')) {
+          triggerErrorCard('Roboflow Error', errMessage);
+        } else if (errMessage.toLowerCase().includes('format') || errMessage.toLowerCase().includes('invalid file') || xhr.status === 400) {
+          if (errMessage.toLowerCase().includes('format') || errMessage.toLowerCase().includes('jpg') || errMessage.toLowerCase().includes('png')) {
+            triggerErrorCard('Invalid File', errMessage);
+          } else {
+            triggerErrorCard('Server Error', errMessage);
+          }
+        } else {
+          triggerErrorCard('Server Error', errMessage);
         }
       }
     });
 
     xhr.addEventListener('error', () => {
       clearInterval(analyzeTimer);
-      loggerError('Network error. Unable to establish connection to the host server.');
+      triggerErrorCard('Network Error', 'Network error. Unable to establish connection to the host server.');
     });
 
     xhr.addEventListener('abort', () => {
       clearInterval(analyzeTimer);
-      loggerError('Request terminated by client.');
+      triggerErrorCard('API Timeout', 'Request terminated by client.');
     });
 
     // Send multipart POST request to Vite proxy endpoint
@@ -307,14 +388,6 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     const formData = new FormData();
     formData.append('image', fileToUpload);
     xhr.send(formData);
-  };
-
-  const loggerError = (msg: string) => {
-    setActiveLog('Error');
-    setAnalysisLogs((prev) => [...prev, `[FAIL] ${msg}`]);
-    setAnalysisStatus('ready'); // reset button to try again
-    setProgress(0);
-    alert(msg);
   };
 
   // Animated Counter for Confidence Gauge
@@ -341,9 +414,11 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
 
   const getStatusStep = () => {
     if (analysisStatus === 'completed') return 'Complete';
-    if (progress >= 95) return 'Receiving Results...';
-    if (progress > 40) return 'Analyzing...';
-    return 'Uploading...';
+    if (progress >= 85) return 'Generating Result...';
+    if (progress >= 65) return 'Running AI Model...';
+    if (progress >= 40) return 'Analyzing MRI...';
+    if (progress >= 10) return 'Uploading...';
+    return 'Preparing Image...';
   };
 
   const handleStartAnalysis = () => {
@@ -563,211 +638,289 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
             </div>
 
             {/* Upload panels layout */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '30px',
-              alignItems: 'stretch'
-            }}>
-              
-              {/* Left panel uploader */}
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', background: 'var(--bg-card)', justifyContent: 'space-between' }}>
-                <h3 style={{ fontSize: '1.2rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Upload size={18} style={{ color: 'var(--primary)' }} />
-                  MRI Scan Upload & Verification
-                </h3>
+            {errorDetails ? (
+              <div className="card animate-fade-in" style={{ 
+                background: 'rgba(239, 68, 68, 0.05)', 
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '16px',
+                padding: '30px',
+                textAlign: 'center',
+                margin: '40px auto',
+                maxWidth: '600px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px',
+                boxShadow: '0 10px 30px -10px rgba(239, 68, 68, 0.1)'
+              }}>
+                <div style={{ 
+                  background: 'rgba(239, 68, 68, 0.1)', 
+                  width: '64px', 
+                  height: '64px', 
+                  borderRadius: '50%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  color: 'var(--error)' 
+                }}>
+                  <AlertTriangle size={32} />
+                </div>
+                <div>
+                  <h3 style={{ color: 'var(--error)', fontSize: '1.25rem', fontWeight: 800 }}>
+                    {errorDetails.title}
+                  </h3>
+                  <div className="badge" style={{ 
+                    marginTop: '8px', 
+                    background: 'rgba(239, 68, 68, 0.15)', 
+                    color: 'var(--error)',
+                    fontSize: '0.7rem',
+                    fontWeight: 700
+                  }}>
+                    {errorDetails.type}
+                  </div>
+                </div>
+                <p style={{ 
+                  color: 'var(--text-secondary)', 
+                  fontSize: '0.95rem', 
+                  lineHeight: 1.6, 
+                  maxWidth: '480px',
+                  margin: '0 auto' 
+                }}>
+                  {errorDetails.message}
+                </p>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <button 
+                    onClick={() => {
+                      setErrorDetails(null);
+                      handleClearImage();
+                    }} 
+                    className="btn btn-primary"
+                    style={{ padding: '10px 20px', fontSize: '0.875rem' }}
+                  >
+                    Reset Scanner
+                  </button>
+                  {selectedFile && (
+                    <button 
+                      onClick={() => {
+                        const file = selectedFile;
+                        setErrorDetails(null);
+                        uploadAndAnalyzeMRI(file);
+                      }} 
+                      className="btn btn-outline"
+                      style={{ padding: '10px 20px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <RefreshCw size={14} /> Retry Ingestion
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                gap: '30px',
+                alignItems: 'stretch'
+              }}>
+                
+                {/* Left panel uploader */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', background: 'var(--bg-card)', justifyContent: 'space-between' }}>
+                  <h3 style={{ fontSize: '1.2rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Upload size={18} style={{ color: 'var(--primary)' }} />
+                    MRI Scan Upload & Verification
+                  </h3>
 
-                <div 
-                  onDragEnter={handleDrag}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  style={{
-                    position: 'relative',
-                    flex: 1,
-                    minHeight: '300px',
-                    border: isDragActive ? '2px dashed var(--primary)' : '2px dashed var(--border)',
-                    background: isDragActive ? 'var(--accent-light)' : 'rgba(0, 0, 0, 0.02)',
-                    borderRadius: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    transition: 'var(--transition)'
-                  }}
-                >
-                  {imagePreview ? (
-                    <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                      {analysisStatus === 'analyzing' && <div className="scanner-line" />}
-                      <div className="scanner-overlay" />
+                  <div 
+                    onDragEnter={handleDrag}
+                    onDragOver={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDrop={handleDrop}
+                    style={{
+                      position: 'relative',
+                      flex: 1,
+                      minHeight: '300px',
+                      border: isDragActive ? '2px dashed var(--primary)' : '2px dashed var(--border)',
+                      background: isDragActive ? 'var(--accent-light)' : 'rgba(0, 0, 0, 0.02)',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      transition: 'var(--transition)'
+                    }}
+                  >
+                    {imagePreview ? (
+                      <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                        {analysisStatus === 'analyzing' && <div className="scanner-line" />}
+                        <div className="scanner-overlay" />
 
-                      {['glioma', 'meningioma', 'healthy'].includes(imagePreview) ? (
-                        renderMRIViewerSVG(imagePreview)
-                      ) : (
-                        <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <img src={imagePreview} alt="MRI scan" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        {['glioma', 'meningioma', 'healthy'].includes(imagePreview) ? (
+                          renderMRIViewerSVG(imagePreview)
+                        ) : (
+                          <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <img src={imagePreview} alt="MRI scan" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '30px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        <div style={{ background: 'var(--bg-subtle)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                          <Upload size={28} style={{ display: 'block', margin: 'auto' }} />
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '30px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      <div style={{ background: 'var(--bg-subtle)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                        <Upload size={28} style={{ display: 'block', margin: 'auto' }} />
+                        <div>
+                          <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Drag and drop MRI scan here</p>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Supports JPG, JPEG, PNG formats (Max 10 MB)</p>
+                        </div>
+                        <button disabled={analysisStatus === 'analyzing'} onClick={() => fileInputRef.current?.click()} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', marginTop: '8px' }}>Browse Files</button>
+                        <input type="file" ref={fileInputRef} accept=".jpg,.jpeg,.png" onChange={handleFileSelect} style={{ display: 'none' }} />
                       </div>
-                      <div>
-                        <p style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Drag and drop MRI scan here</p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Supports JPG, JPEG, PNG formats (Max 10 MB)</p>
-                      </div>
-                      <button disabled={analysisStatus === 'analyzing'} onClick={() => fileInputRef.current?.click()} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', marginTop: '8px' }}>Browse Files</button>
-                      <input type="file" ref={fileInputRef} accept=".jpg,.jpeg,.png" onChange={handleFileSelect} style={{ display: 'none' }} />
+                    )}
+                  </div>
+
+                  {imagePreview && (
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                      <button disabled={analysisStatus === 'analyzing'} onClick={() => fileInputRef.current?.click()} className="btn btn-outline" style={{ padding: '10px 16px', fontSize: '0.85rem', flex: 1 }}><RefreshCw size={14} /> Replace Image</button>
+                      <button disabled={analysisStatus === 'analyzing'} onClick={handleClearImage} className="btn btn-outline" style={{ padding: '10px 16px', fontSize: '0.85rem', flex: 1, color: 'var(--error)', borderColor: 'rgba(239,68,68,0.15)' }}><Trash2 size={14} /> Clear Image</button>
                     </div>
                   )}
                 </div>
 
-                {imagePreview && (
-                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                    <button disabled={analysisStatus === 'analyzing'} onClick={() => fileInputRef.current?.click()} className="btn btn-outline" style={{ padding: '10px 16px', fontSize: '0.85rem', flex: 1 }}><RefreshCw size={14} /> Replace Image</button>
-                    <button disabled={analysisStatus === 'analyzing'} onClick={handleClearImage} className="btn btn-outline" style={{ padding: '10px 16px', fontSize: '0.85rem', flex: 1, color: 'var(--error)', borderColor: 'rgba(239,68,68,0.15)' }}><Trash2 size={14} /> Clear Image</button>
-                  </div>
-                )}
-              </div>
+                {/* Right panel metadata & action */}
+                <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', background: 'var(--bg-card)', textAlign: 'left' }}>
+                  <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Cpu size={18} style={{ color: 'var(--primary)' }} />
+                    Diagnosis Control & Analysis
+                  </h3>
 
-              {/* Right panel metadata & action */}
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', background: 'var(--bg-card)', textAlign: 'left' }}>
-                <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Cpu size={18} style={{ color: 'var(--primary)' }} />
-                  Diagnosis Control & Analysis
-                </h3>
-
-                {analysisStatus === 'idle' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '260px', textAlign: 'center', gap: '12px', color: 'var(--text-secondary)' }}>
-                    <AlertCircle size={40} style={{ color: 'var(--primary)', opacity: 0.6 }} />
-                    <p style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Upload an MRI scan to begin AI analysis.</p>
-                  </div>
-                )}
-
-                {analysisStatus === 'ready' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '60px', height: '60px', background: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {['glioma', 'meningioma', 'healthy'].includes(imagePreview!) ? (
-                            <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600, margin: 'auto' }}>PRESET</div>
-                          ) : (
-                            <img src={imagePreview!} alt="Thumb" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' }}>
-                          <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }}>{fileName}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Size: <strong>{fileSize}</strong></span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Uploaded: <strong>{uploadTime}</strong></span>
-                        </div>
-                      </div>
+                  {analysisStatus === 'idle' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '260px', textAlign: 'center', gap: '12px', color: 'var(--text-secondary)' }}>
+                      <AlertCircle size={40} style={{ color: 'var(--primary)', opacity: 0.6 }} />
+                      <p style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Upload an MRI scan to begin AI analysis.</p>
                     </div>
-                    <button onClick={handleStartAnalysis} className="btn btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1.05rem', borderRadius: '12px' }}><Cpu size={18} /> Analyze MRI Scan</button>
-                  </div>
-                )}
+                  )}
 
-                {analysisStatus === 'analyzing' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--primary)' }}>
-                        <RefreshCw size={20} className="spin-animation" style={{ color: 'var(--accent)' }} />
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>AI Model Inference in progress...</span>
+                  {analysisStatus === 'ready' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                          <div style={{ width: '60px', height: '60px', background: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {['glioma', 'meningioma', 'healthy'].includes(imagePreview!) ? (
+                              <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600, margin: 'auto' }}>PRESET</div>
+                            ) : (
+                              <img src={imagePreview!} alt="Thumb" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflow: 'hidden' }}>
+                            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', display: 'block' }}>{fileName}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Size: <strong>{fileSize}</strong></span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Uploaded: <strong>{uploadTime}</strong></span>
+                          </div>
+                        </div>
                       </div>
+                      <button onClick={handleStartAnalysis} className="btn btn-primary" style={{ width: '100%', padding: '14px', fontSize: '1.05rem', borderRadius: '12px' }}><Cpu size={18} /> Analyze MRI Scan</button>
+                    </div>
+                  )}
 
-                      {/* Premium Stepper */}
-                      <div style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '10px',
-                        background: 'rgba(0, 0, 0, 0.15)',
-                        padding: '16px',
-                        borderRadius: '12px',
-                        border: '1px solid var(--border)',
-                        margin: '8px 0'
-                      }}>
-                        {['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'].map((step, idx) => {
-                          const currentStep = getStatusStep();
-                          const steps = ['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'];
-                          const currentIdx = steps.indexOf(currentStep);
-                          const stepIdx = idx;
-                          const isCurrent = currentStep === step;
-                          const isPast = stepIdx < currentIdx;
-                          
-                          return (
-                            <div key={idx} style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '10px',
-                              fontSize: '0.825rem',
-                              fontWeight: isCurrent ? 700 : isPast ? 600 : 400,
-                              color: isCurrent 
-                                ? 'var(--primary)' 
-                                : isPast 
-                                  ? 'var(--success)' 
-                                  : 'var(--text-muted)',
-                              transition: 'all 0.3s ease',
-                              opacity: isCurrent || isPast ? 1 : 0.5
-                            }}>
-                              <span style={{ 
-                                display: 'inline-flex', 
+                  {analysisStatus === 'analyzing' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--primary)' }}>
+                          <RefreshCw size={20} className="spin-animation" style={{ color: 'var(--accent)' }} />
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>AI Model Inference in progress...</span>
+                        </div>
+
+                        {/* Premium Stepper */}
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '10px',
+                          background: 'rgba(0, 0, 0, 0.15)',
+                          padding: '16px',
+                          borderRadius: '12px',
+                          border: '1px solid var(--border)',
+                          margin: '8px 0'
+                        }}>
+                          {['Preparing Image...', 'Uploading...', 'Analyzing MRI...', 'Running AI Model...', 'Generating Result...', 'Complete'].map((step, idx) => {
+                            const currentStep = getStatusStep();
+                            const steps = ['Preparing Image...', 'Uploading...', 'Analyzing MRI...', 'Running AI Model...', 'Generating Result...', 'Complete'];
+                            const currentIdx = steps.indexOf(currentStep);
+                            const stepIdx = idx;
+                            const isCurrent = currentStep === step;
+                            const isPast = stepIdx < currentIdx;
+                            
+                            return (
+                              <div key={idx} style={{ 
+                                display: 'flex', 
                                 alignItems: 'center', 
-                                justifyContent: 'center', 
-                                width: '22px', 
-                                height: '22px', 
-                                borderRadius: '50%', 
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                border: `2px solid ${
-                                  isCurrent 
-                                    ? 'var(--primary)' 
-                                    : isPast 
-                                      ? 'var(--success)' 
-                                      : 'var(--border)'
-                                }`,
-                                background: isCurrent 
-                                  ? 'rgba(99, 102, 241, 0.1)' 
-                                  : isPast 
-                                    ? 'rgba(52, 211, 153, 0.1)' 
-                                    : 'transparent',
+                                gap: '10px',
+                                fontSize: '0.825rem',
+                                fontWeight: isCurrent ? 700 : isPast ? 600 : 400,
                                 color: isCurrent 
                                   ? 'var(--primary)' 
                                   : isPast 
                                     ? 'var(--success)' 
                                     : 'var(--text-muted)',
-                                transition: 'all 0.3s ease'
+                                transition: 'all 0.3s ease',
+                                opacity: isCurrent || isPast ? 1 : 0.5
                               }}>
-                                {isPast ? '✓' : idx + 1}
-                              </span>
-                              <span>{step}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                <span style={{ 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  width: '22px', 
+                                  height: '22px', 
+                                  borderRadius: '50%', 
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  border: `2px solid ${
+                                    isCurrent 
+                                      ? 'var(--primary)' 
+                                      : isPast 
+                                        ? 'var(--success)' 
+                                        : 'var(--border)'
+                                  }`,
+                                  background: isCurrent 
+                                    ? 'rgba(99, 102, 241, 0.1)' 
+                                    : isPast 
+                                      ? 'rgba(52, 211, 153, 0.1)' 
+                                      : 'transparent',
+                                  color: isCurrent 
+                                    ? 'var(--primary)' 
+                                    : isPast 
+                                      ? 'var(--success)' 
+                                      : 'var(--text-muted)',
+                                  transition: 'all 0.3s ease'
+                                }}>
+                                  {isPast ? '✓' : idx + 1}
+                                </span>
+                                <span>{step}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
-                          <span style={{ color: 'var(--primary)' }}>{activeLog}</span>
-                          <span style={{ color: 'var(--text-primary)' }}>{progress}%</span>
-                        </div>
-                        <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '100px', overflow: 'hidden' }}>
-                          <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(to right, var(--primary), var(--accent))', borderRadius: '100px' }} />
-                        </div>
-                      </div>
-                      <div style={{ background: 'var(--text-primary)', border: '1px solid #1E293B', borderRadius: '8px', padding: '12px 16px', height: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'var(--mono)', fontSize: '0.75rem', color: '#E2E8F0' }}>
-                        {analysisLogs.map((log, idx) => (
-                          <div key={idx} style={{ display: 'flex', gap: '6px', color: idx === analysisLogs.length - 1 ? '#34D399' : '#94A3B8' }}>
-                            <span>&gt;</span><span>{log}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600 }}>
+                            <span style={{ color: 'var(--primary)' }}>{activeLog}</span>
+                            <span style={{ color: 'var(--text-primary)' }}>{progress}%</span>
                           </div>
-                        ))}
+                          <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '100px', overflow: 'hidden' }}>
+                            <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(to right, var(--primary), var(--accent))', borderRadius: '100px' }} />
+                          </div>
+                        </div>
+                        <div style={{ background: 'var(--text-primary)', border: '1px solid #1E293B', borderRadius: '8px', padding: '12px 16px', height: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: 'var(--mono)', fontSize: '0.75rem', color: '#E2E8F0' }}>
+                          {analysisLogs.map((log, idx) => (
+                            <div key={idx} style={{ display: 'flex', gap: '6px', color: idx === analysisLogs.length - 1 ? '#34D399' : '#94A3B8' }}>
+                              <span>&gt;</span><span>{log}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-            </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -857,7 +1010,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 alignItems: 'center', 
                 flexWrap: 'wrap'
               }}>
-                {['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'].map((step, idx) => {
+                {['Preparing Image...', 'Uploading...', 'Analyzing MRI...', 'Running AI Model...', 'Generating Result...', 'Complete'].map((step, idx) => {
                   const isCurrent = step === 'Complete';
                   const isPast = step !== 'Complete';
                   return (
@@ -884,7 +1037,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                         {isPast ? '✓' : idx + 1}
                       </span>
                       <span>{step}</span>
-                      {idx < 3 && <span style={{ color: 'var(--border)', opacity: 0.5 }}>→</span>}
+                      {idx < 5 && <span style={{ color: 'var(--border)', opacity: 0.5 }}>→</span>}
                     </div>
                   );
                 })}
