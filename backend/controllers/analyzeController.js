@@ -1,5 +1,6 @@
 const roboflowService = require('../services/roboflowService');
 const logger = require('../utils/logger');
+const dbService = require('../services/dbService');
 
 const analyzeController = {
   analyzeMRI: async (req, res, next) => {
@@ -27,27 +28,64 @@ const analyzeController = {
       
       const analysisTime = `${analysisTimeSec}s`;
       
+      // Convert buffer to base64 URL for persistent rendering
+      const imgUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+
+      // Build data matching schema
+      const userId = req.user ? req.user.id : 'u1'; // Fallback to default user Eleanor Vance if unauthenticated
+      const userName = req.user ? req.user.name : 'Eleanor Vance';
+      
+      // Retrieve full profile details for age/gender mapping if authenticated
+      let patientAge = '38';
+      let patientGender = 'Female';
+      if (req.user) {
+        const fullUser = await dbService.findUserById(req.user.id);
+        if (fullUser) {
+          patientAge = String(fullUser.age || '38');
+          patientGender = fullUser.gender || 'Female';
+        }
+      }
+
+      const scanRecord = {
+        userId,
+        patientName: userName,
+        patientAge,
+        patientGender,
+        hasTumor: analysisResult.hasTumor,
+        type: analysisResult.type,
+        confidence: analysisResult.confidence,
+        findings: analysisResult.findings,
+        recommendation: analysisResult.recommendation,
+        location: analysisResult.location,
+        riskLevel: analysisResult.riskLevel || (analysisResult.hasTumor ? 'High' : 'Low'),
+        imgUrl,
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      };
+
+      // Save to Database
+      const savedScan = await dbService.saveScan(scanRecord);
+      
       const responseData = {
         status: 'success',
-        tumorDetected: analysisResult.hasTumor,
-        tumorType: analysisResult.type,
-        confidence: analysisResult.confidence,
-        recommendation: `${analysisResult.findings} ${analysisResult.recommendation}`,
+        tumorDetected: savedScan.hasTumor,
+        tumorType: savedScan.type,
+        confidence: savedScan.confidence,
+        recommendation: `${savedScan.findings} ${savedScan.recommendation}`,
         analysisTime,
         
         // Frontend compatibility fields
-        hasTumor: analysisResult.hasTumor,
-        type: analysisResult.type,
-        findings: analysisResult.findings,
-        recommendationText: analysisResult.recommendation,
-        location: analysisResult.location,
-        riskLevel: analysisResult.riskLevel,
-        description: analysisResult.description,
-        symptoms: analysisResult.symptoms,
-        nextStep: analysisResult.nextStep,
-        specialist: analysisResult.specialist,
+        hasTumor: savedScan.hasTumor,
+        type: savedScan.type,
+        findings: savedScan.findings,
+        recommendationText: savedScan.recommendation,
+        location: savedScan.location,
+        riskLevel: savedScan.riskLevel,
+        imgUrl: savedScan.imgUrl,
+        scanId: savedScan.scanId,
+        date: savedScan.date,
+        time: savedScan.time,
         
-        scanId,
         duration: `${analysisTimeSec} seconds`,
         resolution: '512 × 512',
         model: 'RF-DETR Small',
@@ -55,7 +93,7 @@ const analyzeController = {
         engine: 'Roboflow AI'
       };
 
-      logger.info(`MRI analysis complete for ${file.originalname}. Scan ID: ${scanId}. Time: ${analysisTimeSec}s`);
+      logger.info(`MRI analysis complete for ${file.originalname}. Scan ID: ${savedScan.scanId}. Time: ${analysisTimeSec}s`);
       
       res.status(200).json({
         success: true,
