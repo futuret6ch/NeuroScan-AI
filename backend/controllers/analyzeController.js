@@ -59,6 +59,11 @@ const analyzeController = {
       
       res.status(200).json({
         success: true,
+        tumorDetected: responseData.tumorDetected,
+        tumorType: responseData.tumorType,
+        confidence: responseData.confidence,
+        recommendation: responseData.recommendation,
+        analysisTime: responseData.analysisTime,
         data: responseData
       });
 
