@@ -35,6 +35,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
   const [fileSize, setFileSize] = useState<string>('');
   const [uploadTime, setUploadTime] = useState<string>('');
   const [isDragActive, setIsDragActive] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Patient Info States
@@ -158,6 +159,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
         setFileName(file.name);
         setFileSize((file.size / (1024 * 1024)).toFixed(2) + ' MB');
         setUploadTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        setSelectedFile(file);
         setAnalysisStatus('ready');
         setScanResult(null);
       }
@@ -175,6 +177,12 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
       setFileSize(preset.fileSize);
       setUploadTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setImagePreview(presetId); // Presets rendered via SVG
+      
+      // Build a dummy File representation of the preset for multipart upload
+      const dummyBlob = new Blob([presetId], { type: 'text/plain' });
+      const presetFile = new File([dummyBlob], `${presetId}_preset_scan.png`, { type: 'image/png' });
+      setSelectedFile(presetFile);
+      
       setAnalysisStatus('ready');
       setScanResult(null);
     }
@@ -185,6 +193,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     setFileName('');
     setFileSize('');
     setUploadTime('');
+    setSelectedFile(null);
     setAnalysisStatus('idle');
     setScanResult(null);
     setProgress(0);
@@ -195,94 +204,118 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     setAnimatedConfidence(0);
   };
 
-  // Automated Analysis Simulator effect
-  useEffect(() => {
-    let progressInterval: any;
-    let logInterval: any;
-    
-    if (analysisStatus === 'analyzing') {
-      const logsSequence = [
-        { text: 'Preparing image...', progress: 15 },
-        { text: 'Sending image for AI analysis...', progress: 45 },
-        { text: 'Detecting brain abnormalities...', progress: 75 },
-        { text: 'Finalizing prediction...', progress: 95 }
-      ];
+  const uploadAndAnalyzeMRI = (fileToUpload: File) => {
+    setAnalysisStatus('analyzing');
+    setProgress(0);
+    setActiveLog('Preparing image...');
+    setAnalysisLogs(['Preparing image...']);
 
-      let logIndex = 0;
-      setActiveLog(logsSequence[0].text);
-      setAnalysisLogs([logsSequence[0].text]);
+    const xhr = new XMLHttpRequest();
+    let analyzeTimer: any;
 
-      progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(progressInterval);
-            return 100;
-          }
-          return prev + 1;
-        });
-      }, 50); // ~5 seconds scan
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const percentComplete = Math.round((e.loaded / e.total) * 100);
+        // Map upload to 0-40% progress
+        const uploadProgress = Math.round(percentComplete * 0.4);
+        setProgress(uploadProgress);
+        setActiveLog(`Uploading... (${percentComplete}%)`);
+        
+        if (percentComplete === 100) {
+          setActiveLog('Analyzing...');
+          setAnalysisLogs((prev) => [
+            ...prev,
+            'MRI file successfully uploaded to backend secure memory.',
+            'Analyzing features...'
+          ]);
 
-      logInterval = setInterval(() => {
-        logIndex++;
-        if (logIndex < logsSequence.length) {
-          const nextLog = logsSequence[logIndex].text;
-          setActiveLog(nextLog);
-          setAnalysisLogs((prev) => [...prev, nextLog]);
+          // Increment mock progress slowly from 40% to 95% while backend processes
+          let mockProgress = 40;
+          analyzeTimer = setInterval(() => {
+            mockProgress += 1;
+            if (mockProgress >= 95) {
+              clearInterval(analyzeTimer);
+            } else {
+              setProgress(mockProgress);
+              if (mockProgress === 55) {
+                setActiveLog('Sending image for AI analysis...');
+                setAnalysisLogs((prev) => [...prev, 'Sending image to Roboflow Serverless API...']);
+              }
+              if (mockProgress === 72) {
+                setActiveLog('Detecting brain abnormalities...');
+                setAnalysisLogs((prev) => [...prev, 'Running CNN object detection models...']);
+              }
+              if (mockProgress === 88) {
+                setActiveLog('Finalizing prediction...');
+                setAnalysisLogs((prev) => [...prev, 'Consolidating confidence ratios...']);
+              }
+            }
+          }, 80);
         }
-      }, 1250);
-    }
-
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(logInterval);
-    };
-  }, [analysisStatus]);
-
-  // Complete Scan State Hook
-  useEffect(() => {
-    if (progress === 100 && analysisStatus === 'analyzing') {
-      let finalResult: ScanResult;
-
-      if (imagePreview === 'meningioma') {
-        const preset = presets.find(p => p.id === 'meningioma')!;
-        finalResult = {
-          ...preset,
-          scanId: `NS-${Math.floor(Math.random() * 90000 + 10000)}-DX`,
-          duration: '1.3 seconds',
-          resolution: '512 × 512',
-          model: 'RF-DETR Small',
-          dataset: 'Brain Tumor MRI Dataset',
-          engine: 'Roboflow AI'
-        };
-      } else if (imagePreview === 'healthy') {
-        const preset = presets.find(p => p.id === 'healthy')!;
-        finalResult = {
-          ...preset,
-          scanId: `NS-${Math.floor(Math.random() * 90000 + 10000)}-DX`,
-          duration: '1.2 seconds',
-          resolution: '512 × 512',
-          model: 'RF-DETR Small',
-          dataset: 'Brain Tumor MRI Dataset',
-          engine: 'Roboflow AI'
-        };
-      } else {
-        // Glioma preset or any user uploaded custom scan result
-        const preset = presets.find(p => p.id === 'glioma')!;
-        finalResult = {
-          ...preset,
-          scanId: `NS-${Math.floor(Math.random() * 90000 + 10000)}-DX`,
-          duration: '1.4 seconds',
-          resolution: '512 × 512',
-          model: 'RF-DETR Small',
-          dataset: 'Brain Tumor MRI Dataset',
-          engine: 'Roboflow AI'
-        };
       }
+    });
 
-      setScanResult(finalResult);
-      setAnalysisStatus('completed');
-    }
-  }, [progress, analysisStatus, imagePreview]);
+    xhr.addEventListener('load', () => {
+      clearInterval(analyzeTimer);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setActiveLog('Receiving Results...');
+        setAnalysisLogs((prev) => [
+          ...prev,
+          'Predictions received from server.',
+          'De-serializing data frames...'
+        ]);
+        
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success && response.data) {
+            setProgress(100);
+            
+            // Short delay for visual polish of "Receiving Results..."
+            setTimeout(() => {
+              setScanResult(response.data);
+              setAnalysisStatus('completed');
+              setAnalysisLogs((prev) => [...prev, 'Diagnosis Complete.']);
+            }, 600);
+          } else {
+            throw new Error(response.error || 'Server returned an invalid result formatting.');
+          }
+        } catch (err: any) {
+          loggerError(err.message || 'Result rendering failed.');
+        }
+      } else {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          loggerError(response.error || 'Server rejected request.');
+        } catch (e) {
+          loggerError(`Inference request failed with HTTP: ${xhr.status}`);
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      clearInterval(analyzeTimer);
+      loggerError('Network error. Unable to establish connection to the host server.');
+    });
+
+    xhr.addEventListener('abort', () => {
+      clearInterval(analyzeTimer);
+      loggerError('Request terminated by client.');
+    });
+
+    // Send multipart POST request to Vite proxy endpoint
+    xhr.open('POST', '/api/analyze');
+    const formData = new FormData();
+    formData.append('image', fileToUpload);
+    xhr.send(formData);
+  };
+
+  const loggerError = (msg: string) => {
+    setActiveLog('Error');
+    setAnalysisLogs((prev) => [...prev, `[FAIL] ${msg}`]);
+    setAnalysisStatus('ready'); // reset button to try again
+    setProgress(0);
+    alert(msg);
+  };
 
   // Animated Counter for Confidence Gauge
   useEffect(() => {
@@ -307,10 +340,8 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
   }, [analysisStatus, scanResult]);
 
   const handleStartAnalysis = () => {
-    if (analysisStatus !== 'ready') return;
-    setProgress(0);
-    setAnalysisLogs([]);
-    setAnalysisStatus('analyzing');
+    if (analysisStatus !== 'ready' || !selectedFile) return;
+    uploadAndAnalyzeMRI(selectedFile);
   };
 
   const handleViewReport = () => {
