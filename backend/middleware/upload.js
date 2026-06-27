@@ -1,3 +1,4 @@
+const path = require('path');
 const multer = require('multer');
 
 // Store file in memory as buffer (secure, HIPAA-friendly: no disk retention)
@@ -5,8 +6,11 @@ const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+  const allowedExtensions = ['.jpg', '.jpeg', '.png'];
   
-  if (allowedMimeTypes.includes(file.mimetype)) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
     cb(new Error('Invalid file type. Only JPG, JPEG, and PNG images are supported.'), false);

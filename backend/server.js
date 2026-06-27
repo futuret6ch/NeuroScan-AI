@@ -6,6 +6,8 @@ const logger = require('./utils/logger');
 const analyzeRoutes = require('./routes/analyzeRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
+const path = require('path');
+
 const app = express();
 
 // Standard middleware
@@ -13,6 +15,11 @@ app.use(cors()); // Allow cross-origin requests (React development config)
 app.use(morgan('dev')); // Dev level HTTP request logs
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static assets in production
+if (config.nodeEnv === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+}
 
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
@@ -26,6 +33,16 @@ app.get('/api/health', (req, res) => {
 
 // Main routes mapping
 app.use('/api', analyzeRoutes);
+
+// Wildcard fallback for client-side routing in production
+if (config.nodeEnv === 'production') {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  });
+}
 
 // Unmatched route fallback
 app.use((req, res, next) => {

@@ -339,6 +339,13 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     }
   }, [analysisStatus, scanResult]);
 
+  const getStatusStep = () => {
+    if (analysisStatus === 'completed') return 'Complete';
+    if (progress >= 95) return 'Receiving Results...';
+    if (progress > 40) return 'Analyzing...';
+    return 'Uploading...';
+  };
+
   const handleStartAnalysis = () => {
     if (analysisStatus !== 'ready' || !selectedFile) return;
     uploadAndAnalyzeMRI(selectedFile);
