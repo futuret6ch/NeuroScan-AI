@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 
 // Express global error handler middleware
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   logger.error('Unhandled request error:', err);
 
   // Check if error is from multer limits

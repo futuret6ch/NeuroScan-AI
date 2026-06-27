@@ -286,7 +286,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
         try {
           const response = JSON.parse(xhr.responseText);
           loggerError(response.error || 'Server rejected request.');
-        } catch (e) {
+        } catch {
           loggerError(`Inference request failed with HTTP: ${xhr.status}`);
         }
       }
