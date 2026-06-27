@@ -302,8 +302,14 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
       loggerError('Request terminated by client.');
     });
 
+    xhr.addEventListener('timeout', () => {
+      clearInterval(analyzeTimer);
+      loggerError('Request timed out. The server is taking too long to respond.');
+    });
+
     // Send multipart POST request to Vite proxy endpoint
     xhr.open('POST', '/api/analyze');
+    xhr.timeout = 15000;
     const formData = new FormData();
     formData.append('image', fileToUpload);
     xhr.send(formData);
@@ -1219,11 +1225,18 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 <FileText size={16} /> Download Medical Report
               </button>
               <button 
+                onClick={handleRetryAnalysis} 
+                className="btn btn-outline"
+                style={{ padding: '12px 24px', borderRadius: '8px' }}
+              >
+                <RefreshCw size={16} /> Retry Analysis
+              </button>
+              <button 
                 onClick={handleClearImage} 
                 className="btn btn-outline"
                 style={{ padding: '12px 24px', borderRadius: '8px' }}
               >
-                <RefreshCw size={16} /> Analyze Another MRI
+                <Trash2 size={16} /> Analyze Another MRI
               </button>
               {setCurrentPage && (
                 <button 
