@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Cpu, Trash2, RefreshCw, CheckCircle2, AlertTriangle, AlertCircle, Calendar, ArrowRight, ZoomIn, Maximize2, Download, Home, FileText } from 'lucide-react';
+import { Upload, Cpu, Trash2, RefreshCw, CheckCircle2, AlertTriangle, AlertCircle, ZoomIn, Maximize2, Download, Home, FileText } from 'lucide-react';
 
 interface ScanResult {
   hasTumor: boolean;
@@ -410,7 +410,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
   };
 
   // Radial progress calculations
-  const gaugeRadius = 52;
+  const gaugeRadius = 35;
   const gaugeCircumference = 2 * Math.PI * gaugeRadius;
   const animatedOffset = gaugeCircumference - (gaugeCircumference * animatedConfidence) / 100;
 
@@ -559,7 +559,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                   }}
                 >
                   {imagePreview ? (
-                    <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyText: 'center', position: 'relative' }}>
+                    <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                       {analysisStatus === 'analyzing' && <div className="scanner-line" />}
                       <div className="scanner-overlay" />
 
@@ -573,7 +573,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '30px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                      <div style={{ background: 'var(--bg-subtle)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyText: 'center', color: 'var(--primary)' }}>
+                      <div style={{ background: 'var(--bg-subtle)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
                         <Upload size={28} style={{ display: 'block', margin: 'auto' }} />
                       </div>
                       <div>
@@ -612,7 +612,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '60px', height: '60px', background: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyText: 'center', flexShrink: 0 }}>
+                        <div style={{ width: '60px', height: '60px', background: '#000', borderRadius: '8px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           {['glioma', 'meningioma', 'healthy'].includes(imagePreview!) ? (
                             <div style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 600, margin: 'auto' }}>PRESET</div>
                           ) : (
@@ -899,16 +899,16 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 }}>
                   <div style={{ position: 'relative', width: '90px', height: '90px' }}>
                     <svg width="90" height="90" style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}>
-                      <circle cx="45" cy="45" r="35" stroke="var(--border)" strokeWidth="6" fill="transparent" />
+                      <circle cx="45" cy="45" r={gaugeRadius} stroke="var(--border)" strokeWidth="6" fill="transparent" />
                       <circle 
                         cx="45" 
                         cy="45" 
-                        r="35" 
+                        r={gaugeRadius} 
                         stroke={scanResult.hasTumor ? 'var(--error)' : 'var(--success)'} 
                         strokeWidth="6" 
                         fill="transparent"
-                        strokeDasharray={2 * Math.PI * 35}
-                        strokeDashoffset={2 * Math.PI * 35 - (2 * Math.PI * 35 * animatedConfidence) / 100}
+                        strokeDasharray={gaugeCircumference}
+                        strokeDashoffset={animatedOffset}
                         strokeLinecap="round"
                         style={{ transition: 'stroke-dashoffset 0.1s linear' }}
                       />
