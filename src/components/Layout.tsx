@@ -19,6 +19,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
+    { id: 'dashboard', label: 'Dashboard' },
     { id: 'home', label: 'Home' },
     { id: 'detection', label: 'AI Detection' },
     { id: 'report', label: 'Report' },
