@@ -5,13 +5,14 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   roboflow: {
     apiKey: process.env.ROBOFLOW_API_KEY || '',
-    modelId: process.env.ROBOFLOW_MODEL_ID || 'brain-tumor-detection-mri',
-    version: process.env.ROBOFLOW_VERSION || '1'
+    workflowUrl: process.env.ROBOFLOW_WORKFLOW_URL || ''
   },
   // Helper to check if we are using placeholder credentials
   isRoboflowConfigured: () => {
     const key = process.env.ROBOFLOW_API_KEY;
-    return key && key !== '' && key !== 'YOUR_API_KEY_HERE';
+    const url = process.env.ROBOFLOW_WORKFLOW_URL;
+    return key && key !== '' && key !== 'YOUR_API_KEY_HERE' && key !== 'YOUR_API_KEY' &&
+           url && url !== '' && url !== 'YOUR_WORKFLOW_URL_HERE' && url !== 'YOUR_WORKFLOW_URL';
   }
 };
 
