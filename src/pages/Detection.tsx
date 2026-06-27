@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Cpu, Trash2, RefreshCw, CheckCircle2, AlertTriangle, AlertCircle, ZoomIn, Maximize2, Download, Home, FileText } from 'lucide-react';
-
+import { notify } from '../components/NotificationToast';
 interface ScanResult {
   hasTumor: boolean;
   type: string;
@@ -63,7 +63,15 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [animatedConfidence, setAnimatedConfidence] = useState<number>(0);
   const [isZoomed, setIsZoomed] = useState<boolean>(false);
+  const [showOverlay, setShowOverlay] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Appointment state parameters
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+  const [bookingDoctor, setBookingDoctor] = useState('Dr. Robert Carter');
+  const [bookingSymptoms, setBookingSymptoms] = useState('');
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   // Presets data for testing
   const presets = [
@@ -255,6 +263,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     setErrorDetails({ title, message: detailedMessage, type });
     setAnalysisStatus('idle');
     setProgress(0);
+    notify('error', type, detailedMessage);
   };
 
   const uploadAndAnalyzeMRI = (fileToUpload: File) => {
@@ -330,6 +339,8 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
               setScanResult(response.data);
               setAnalysisStatus('completed');
               setAnalysisLogs((prev) => [...prev, 'Complete.']);
+              notify('success', 'Analysis Completed', 'MRI brain scan diagnostic telemetry parsed successfully.');
+              notify('success', 'Report Generated', 'Patient clinical diagnostic log record saved.');
             }, 650);
           } else {
             throw new Error(response.error || 'Server returned an invalid result formatting.');
@@ -383,6 +394,10 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
 
     // Send multipart POST request to Vite proxy endpoint
     xhr.open('POST', '/api/analyze');
+    const token = localStorage.getItem('neuroscan_token');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
     const formData = new FormData();
     formData.append('image', fileToUpload);
     xhr.send(formData);
@@ -436,6 +451,44 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
         imgUrl: (imagePreview !== 'glioma' && imagePreview !== 'meningioma' && imagePreview !== 'healthy') ? imagePreview || undefined : undefined,
         name: patientName
       });
+    }
+  };
+
+  const handleBookAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bookingDate || !bookingTime) {
+      notify('warning', 'Schedule Check', 'Please select a preferred date and time slot.');
+      return;
+    }
+    setBookingLoading(true);
+    try {
+      const res = await fetch('/api/appointments/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('neuroscan_token')}`
+        },
+        body: JSON.stringify({
+          date: bookingDate,
+          time: bookingTime,
+          doctorName: bookingDoctor,
+          symptoms: bookingSymptoms
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        notify('success', 'Appointment Booked', `Specialist consultation request with ${bookingDoctor} confirmed.`);
+        setBookingSymptoms('');
+        setBookingDate('');
+        setBookingTime('');
+      } else {
+        notify('error', 'Booking Failed', data.message || 'Consultation scheduling failed.');
+      }
+    } catch (e) {
+      notify('error', 'Connection Error', 'Unable to contact the clinical scheduling server.');
+    } finally {
+      setBookingLoading(false);
     }
   };
 
@@ -504,7 +557,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
         <path d="M 52,36 C 55,40 55,46 52,50" stroke="var(--primary)" strokeWidth="1" />
 
         {/* Tumor target highlight overlay */}
-        {analysisStatus === 'completed' && loc && (
+        {analysisStatus === 'completed' && loc && showOverlay && (
           <circle 
             cx={loc.x} 
             cy={loc.y} 
@@ -1097,13 +1150,58 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                     ) : (
                       <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <img src={imagePreview!} alt="MRI scan review" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                        {scanResult.hasTumor && (
-                          <div className="tumor-indicator" style={{
-                            top: '40%',
-                            left: '55%',
-                            width: '45px',
-                            height: '45px'
-                          }} />
+                        
+                        {/* Dynamic Bounding Box Overlay */}
+                        {scanResult.hasTumor && scanResult.location && showOverlay && (
+                          <div style={{
+                            position: 'absolute',
+                            left: `${scanResult.location.x}%`,
+                            top: `${scanResult.location.y}%`,
+                            width: `${scanResult.location.r * 2.2}%`,
+                            height: `${scanResult.location.r * 2.2}%`,
+                            border: '2px solid var(--error)',
+                            borderRadius: '8px',
+                            transform: 'translate(-50%, -50%)',
+                            boxShadow: '0 0 12px var(--error)',
+                            pointerEvents: 'none',
+                            transition: 'all 0.3s ease'
+                          }}>
+                            <span style={{
+                              position: 'absolute',
+                              top: '-20px',
+                              left: '0',
+                              background: 'var(--error)',
+                              color: '#FFFFFF',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.65rem',
+                              fontWeight: 'bold',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                            }}>
+                              {scanResult.type} ({scanResult.confidence}%)
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Location coordinates warning fallback */}
+                        {scanResult.hasTumor && !scanResult.location && (
+                          <div style={{
+                            position: 'absolute',
+                            bottom: '12px',
+                            left: '12px',
+                            right: '12px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            fontSize: '0.75rem',
+                            color: 'var(--error)',
+                            textAlign: 'center',
+                            fontWeight: 600
+                          }}>
+                            ⚠️ AI localization coordinates are unavailable for this prediction.
+                          </div>
                         )}
                       </div>
                     )}
@@ -1113,37 +1211,69 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                 {/* Clinical Viewer Actions Row */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '8px'
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '6px'
                 }}>
                   <button 
                     onClick={() => setIsZoomed(!isZoomed)} 
                     className={`btn ${isZoomed ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ padding: '8px', fontSize: '0.75rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
+                    style={{ padding: '8px 4px', fontSize: '0.7rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
                   >
-                    <ZoomIn size={16} /> {isZoomed ? 'Zoom Out' : 'Zoom In'}
+                    <ZoomIn size={14} /> {isZoomed ? 'Zoom Out' : 'Zoom In'}
                   </button>
                   <button 
                     onClick={() => setIsFullscreen(true)} 
                     className="btn btn-outline"
-                    style={{ padding: '8px', fontSize: '0.75rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
+                    style={{ padding: '8px 4px', fontSize: '0.7rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
                   >
-                    <Maximize2 size={16} /> Full Screen
+                    <Maximize2 size={14} /> Full Screen
                   </button>
                   <button 
                     onClick={handleDownloadImage}
                     className="btn btn-outline"
-                    style={{ padding: '8px', fontSize: '0.75rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
+                    style={{ padding: '8px 4px', fontSize: '0.7rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
                   >
-                    <Download size={16} /> Download
+                    <Download size={14} /> Download
+                  </button>
+                  <button 
+                    onClick={() => setShowOverlay(!showOverlay)} 
+                    className={`btn ${showOverlay ? 'btn-primary' : 'btn-outline'}`}
+                    style={{ padding: '8px 4px', fontSize: '0.7rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px' }}
+                  >
+                    <Cpu size={14} /> {showOverlay ? 'Hide AI' : 'Show AI'}
                   </button>
                   <button 
                     onClick={handleClearImage} 
                     className="btn btn-outline"
-                    style={{ padding: '8px', fontSize: '0.75rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px', color: 'var(--error)' }}
+                    style={{ padding: '8px 4px', fontSize: '0.7rem', gap: '4px', display: 'flex', flexDirection: 'column', borderRadius: '8px', color: 'var(--error)' }}
                   >
                     <RefreshCw size={16} /> Replace
                   </button>
+                </div>
+
+                {/* Annotation Legend */}
+                <div style={{
+                  background: 'var(--bg-subtle)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-around',
+                  fontSize: '0.725rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', border: '2.5px solid var(--error)', borderRadius: '2px' }} />
+                    <span>Tumor Region Box</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '12px', height: '1.5px', background: 'rgba(255,255,255,0.75)' }} />
+                    <span>Cortex Boundary</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '12px', height: '1.5px', background: 'var(--primary)' }} />
+                    <span>Ventricle Guide</span>
+                  </div>
                 </div>
               </div>
 
@@ -1348,6 +1478,64 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
                   <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{scanResult.engine}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Appointment Consultation Request Form */}
+            <div className="card" style={{ background: 'var(--bg-card)', padding: '24px', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Need a specialist consultation?</h3>
+                <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Book a priority telehealth slot or local clinical review with our medical team</p>
+              </div>
+
+              <form onSubmit={handleBookAppointment} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SELECT DOCTOR SPECIALIST</label>
+                  <select
+                    value={bookingDoctor}
+                    onChange={(e) => setBookingDoctor(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none' }}
+                  >
+                    <option value="Dr. Robert Carter">Dr. Robert Carter - Neuro-Oncologist (Boston)</option>
+                    <option value="Dr. Robert Chen">Dr. Robert Chen - Radiation Oncologist (NYC)</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PREFERRED DATE</label>
+                  <input
+                    type="date"
+                    value={bookingDate}
+                    onChange={(e) => setBookingDate(e.target.value)}
+                    style={{ padding: '9px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-secondary)' }}>PREFERRED TIME SLOT</label>
+                  <input
+                    type="time"
+                    value={bookingTime}
+                    onChange={(e) => setBookingTime(e.target.value)}
+                    style={{ padding: '9px 10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-secondary)' }}>SYMPTOMS & BRIEF DESCRIPTION</label>
+                  <input
+                    type="text"
+                    value={bookingSymptoms}
+                    onChange={(e) => setBookingSymptoms(e.target.value)}
+                    placeholder="e.g. chronic headache, peripheral vision blurred"
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '0.825rem', outline: 'none' }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={bookingLoading}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', height: '40px', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <Cpu size={14} /> {bookingLoading ? 'Scheduling...' : 'Book Appointment'}
+                </button>
+              </form>
             </div>
 
             {/* Bottom Actions Row */}

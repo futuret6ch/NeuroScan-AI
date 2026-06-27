@@ -131,9 +131,11 @@ class DatabaseService {
   _readData() {
     try {
       const content = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(content);
+      const data = JSON.parse(content);
+      if (!data.appointments) data.appointments = [];
+      return data;
     } catch (e) {
-      return { users: [], scans: [] };
+      return { users: [], scans: [], appointments: [] };
     }
   }
 
@@ -309,6 +311,33 @@ class DatabaseService {
     
     this._writeData(db);
     return db.scans[index];
+  }
+
+  // --- APPOINTMENT OPERATIONS ---
+  async saveAppointment(appData) {
+    const db = this._readData();
+    const newApp = {
+      appointmentId: 'a' + Date.now(),
+      userId: appData.userId,
+      patientName: appData.patientName,
+      date: appData.date,
+      time: appData.time,
+      doctorName: appData.doctorName,
+      symptoms: appData.symptoms || ''
+    };
+    db.appointments.unshift(newApp);
+    this._writeData(db);
+    return newApp;
+  }
+
+  async getAppointmentsForUser(userId) {
+    const db = this._readData();
+    return db.appointments.filter(a => a.userId === userId);
+  }
+
+  async getAllAppointments() {
+    const db = this._readData();
+    return db.appointments;
   }
 }
 

@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, CheckCircle, AlertTriangle, AlertCircle, Share2, Search, Trash2, Eye, Plus, FileText, History, Check } from 'lucide-react';
+import { 
+  Printer, CheckCircle, AlertTriangle, AlertCircle, Share2, Search, 
+  Trash2, Eye, Plus, FileText, History, Check, BarChart3, Download 
+} from 'lucide-react';
+import { notify } from '../components/NotificationToast';
 
 interface ScanResult {
   hasTumor: boolean;
@@ -38,14 +42,19 @@ interface ScanResult {
   hospitalName?: string;
   fileName?: string;
   fileSize?: string;
+  clinicalNotes?: string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  userId?: string;
 }
 
 interface ReportProps {
   scanResult: ScanResult | null;
   setCurrentPage?: (page: string) => void;
+  initialTab?: 'report' | 'archive';
 }
 
-export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) => {
+export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage, initialTab }) => {
   // If no scan result, we supply a mock interactive default case
   const defaultMockResult: ScanResult = {
     hasTumor: true,
@@ -67,7 +76,20 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
     engine: 'Roboflow AI'
   };
 
-  const [activeTab, setActiveTab] = useState<'report' | 'archive'>('report');
+  const [activeTab, setActiveTab] = useState<'recent' | 'archive' | 'downloads' | 'analytics' | 'report'>(() => {
+    if (initialTab === 'archive') return 'archive';
+    if (initialTab === 'report') return 'report';
+    if (scanResult) return 'report';
+    return 'recent';
+  });
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    } else if (scanResult) {
+      setActiveTab('report');
+    }
+  }, [initialTab, scanResult]);
   
   // Demographics Editor states
   const [patientName, setPatientName] = useState('Eleanor Vance');
@@ -83,6 +105,10 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
 
   // History list state
   const [historyReports, setHistoryReports] = useState<ScanResult[]>([]);
+  
+  // Email Dispatcher states
+  const [emailAddress, setEmailAddress] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -164,6 +190,45 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
     navigator.clipboard.writeText(reportUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSendReportEmail = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!emailAddress) {
+      notify('warning', 'Email Verification', 'Please provide a valid recipient email address.');
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const res = await fetch('/api/email/send-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('neuroscan_token')}`
+        },
+        body: JSON.stringify({
+          email: emailAddress,
+          prediction: activeReport.type,
+          confidence: activeReport.confidence,
+          recommendation: activeReport.recommendation,
+          findings: activeReport.findings,
+          scanId: activeReport.scanId,
+          patientName: activeReport.patientName || patientName
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        notify('success', 'Email Sent', `Diagnostic report successfully dispatched to ${emailAddress}.`);
+        setEmailAddress('');
+      } else {
+        notify('error', 'Dispatch Error', data.message || 'SMTP transmission request rejected.');
+      }
+    } catch (e) {
+      notify('error', 'Connection Anomaly', 'Could not establish connection to reports delivery gateway.');
+    } finally {
+      setEmailLoading(false);
+    }
   };
 
   const handleDeleteHistoryReport = (id: string, e: React.MouseEvent) => {
@@ -276,23 +341,254 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Medical Diagnostics Lab</h2>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Automated report sheets and diagnostic database</p>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button 
-              onClick={() => setActiveTab('report')} 
-              className={`btn ${activeTab === 'report' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px' }}
+              onClick={() => setActiveTab('recent')} 
+              className={`btn ${activeTab === 'recent' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.85rem' }}
             >
-              <FileText size={16} /> Active Patient Report
+              Recent Reports
             </button>
             <button 
               onClick={() => setActiveTab('archive')} 
               className={`btn ${activeTab === 'archive' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.85rem' }}
             >
-              <History size={16} /> Clinical Archive ({historyReports.length})
+              <History size={14} /> Scan History ({historyReports.length})
+            </button>
+            <button 
+              onClick={() => setActiveTab('downloads')} 
+              className={`btn ${activeTab === 'downloads' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.85rem' }}
+            >
+              <Download size={14} /> Downloads
+            </button>
+            <button 
+              onClick={() => setActiveTab('analytics')} 
+              className={`btn ${activeTab === 'analytics' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.85rem' }}
+            >
+              <BarChart3 size={14} /> Analytics
+            </button>
+            <button 
+              onClick={() => setActiveTab('report')} 
+              className={`btn ${activeTab === 'report' ? 'btn-primary' : 'btn-outline'}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.85rem' }}
+            >
+              <FileText size={14} /> Report Details
             </button>
           </div>
         </div>
+
+        {/* Tab: Recent Reports */}
+        {activeTab === 'recent' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'left' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>Recent Reports Ingestion</h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>List of recently completed MRI tumor screenings ready for clinician review.</p>
+            
+            {historyReports.length === 0 ? (
+              <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <FileText size={48} style={{ opacity: 0.3, marginBottom: '16px' }} />
+                <p style={{ fontWeight: 600 }}>No reports generated yet.</p>
+                <button onClick={() => setCurrentPage && setCurrentPage('detection')} className="btn btn-primary" style={{ marginTop: '16px', padding: '8px 16px', fontSize: '0.85rem' }}>
+                  Analyze New Scan
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                {historyReports.map((report) => (
+                  <div key={report.scanId} className="card border-hover" style={{ padding: '20px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-secondary)' }}>#{report.scanId}</span>
+                      <span style={{
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.675rem',
+                        fontWeight: 700,
+                        background: report.hasTumor ? 'rgba(239, 68, 68, 0.1)' : 'rgba(52, 211, 153, 0.1)',
+                        color: report.hasTumor ? 'var(--error)' : 'var(--success)'
+                      }}>{report.hasTumor ? report.type : 'Healthy'}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '48px', height: '48px', background: '#000', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {report.imgUrl ? (
+                          <img src={report.imgUrl} alt="scan preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          renderReportBrainSVG(report.location)
+                        )}
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)' }}>{report.patientName || report.name || 'Eleanor Vance'}</h4>
+                        <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>{report.date}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Confidence: <strong style={{ color: 'var(--text-primary)' }}>{report.confidence}%</strong></span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button 
+                          onClick={() => handleSelectHistoryReport(report)}
+                          className="btn btn-outline"
+                          style={{ padding: '4px 8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                        >
+                          <Eye size={12} /> View Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Downloads */}
+        {activeTab === 'downloads' && (
+          <div className="card" style={{ padding: '24px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download style={{ color: 'var(--primary)' }} /> Document Download & Print Ledger
+            </h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>Select diagnostic report summaries to download as offline PDFs or copy direct sharing links.</p>
+
+            {historyReports.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <AlertCircle size={40} style={{ opacity: 0.4, color: 'var(--primary)', marginBottom: '12px' }} />
+                <p style={{ fontWeight: 600 }}>No documents registered for download.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                      <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)' }}>Scan ID</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient Name</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)' }}>Verdict</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)' }}>Ingestion Date</th>
+                      <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyReports.map((report) => (
+                      <tr key={report.scanId} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '12px 16px', fontWeight: 800, color: 'var(--text-primary)' }}>#{report.scanId}</td>
+                        <td style={{ padding: '12px 16px', fontWeight: 600 }}>{report.patientName || report.name || 'Eleanor Vance'}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            background: report.hasTumor ? 'rgba(239, 68, 68, 0.08)' : 'rgba(52, 211, 153, 0.08)',
+                            color: report.hasTumor ? 'var(--error)' : 'var(--success)'
+                          }}>{report.hasTumor ? report.type : 'Healthy'}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{report.date}</td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => {
+                                handleSelectHistoryReport(report);
+                                setTimeout(() => window.print(), 100);
+                              }}
+                              className="btn btn-outline"
+                              style={{ padding: '6px 12px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Printer size={12} /> Print PDF
+                            </button>
+                            <button 
+                              onClick={() => {
+                                const reportUrl = `${window.location.origin}/report/${report.scanId || 'demo'}`;
+                                navigator.clipboard.writeText(reportUrl);
+                                notify('success', 'Copied', 'Report URL copied to clipboard.');
+                              }}
+                              className="btn btn-outline"
+                              style={{ padding: '6px 12px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Share2 size={12} /> Share URL
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab: Analytics */}
+        {activeTab === 'analytics' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'left' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BarChart3 style={{ color: 'var(--primary)' }} /> Clinical Statistical Distribution Diagnostics
+            </h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+              <div className="card" style={{ padding: '20px', background: 'var(--bg-card)', borderLeft: '4px solid var(--primary)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>TOTAL INGESTED SCANS</span>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--text-primary)', margin: '8px 0 0 0' }}>{historyReports.length}</h2>
+              </div>
+              <div className="card" style={{ padding: '20px', background: 'var(--bg-card)', borderLeft: '4px solid var(--error)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>TUMOR MASS CASES</span>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--error)', margin: '8px 0 0 0' }}>{historyReports.filter(r => r.hasTumor).length}</h2>
+              </div>
+              <div className="card" style={{ padding: '20px', background: 'var(--bg-card)', borderLeft: '4px solid var(--success)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)' }}>HEALTHY CASES</span>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--success)', margin: '8px 0 0 0' }}>{historyReports.filter(r => !r.hasTumor).length}</h2>
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '24px', background: 'var(--bg-card)' }}>
+              <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '16px' }}>Tumor Type Distribution Indicator</h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                    <span>Glioma Cases</span>
+                    <span>{historyReports.filter(r => r.type?.toLowerCase().includes('glioma')).length} cases</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      width: `${historyReports.length > 0 ? (historyReports.filter(r => r.type?.toLowerCase().includes('glioma')).length / historyReports.length) * 100 : 0}%`, 
+                      height: '100%', 
+                      background: 'var(--error)' 
+                    }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                    <span>Meningioma Cases</span>
+                    <span>{historyReports.filter(r => r.type?.toLowerCase().includes('meningioma')).length} cases</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      width: `${historyReports.length > 0 ? (historyReports.filter(r => r.type?.toLowerCase().includes('meningioma')).length / historyReports.length) * 100 : 0}%`, 
+                      height: '100%', 
+                      background: 'var(--primary)' 
+                    }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                    <span>Healthy Brain Cases</span>
+                    <span>{historyReports.filter(r => !r.hasTumor).length} cases</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      width: `${historyReports.length > 0 ? (historyReports.filter(r => !r.hasTumor).length / historyReports.length) * 100 : 0}%`, 
+                      height: '100%', 
+                      background: 'var(--success)' 
+                    }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab 1: Clinical Active Report */}
         {activeTab === 'report' && (
@@ -610,6 +906,34 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
                 </p>
               </div>
 
+              {/* Doctor Clinical Notes */}
+              {activeResult.reviewedBy && (
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', color: 'var(--success)', marginBottom: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Physician Clinical Notes
+                  </h3>
+                  <div style={{
+                    fontSize: '0.875rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    borderLeft: '3px solid var(--success)',
+                    paddingLeft: '14px',
+                    margin: 0,
+                    background: 'rgba(52, 211, 153, 0.04)',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(52, 211, 153, 0.15)'
+                  }}>
+                    <p style={{ margin: '0 0 6px 0', fontStyle: 'italic' }}>
+                      "{activeResult.clinicalNotes || 'No specific clinical notes added.'}"
+                    </p>
+                    <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                      Verified and signed by <strong>{activeResult.reviewedBy}</strong> on {activeResult.reviewedAt}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Technical Model Parameters Sheet */}
               <div style={{
                 background: 'var(--bg-subtle)',
@@ -677,9 +1001,53 @@ export const Report: React.FC<ReportProps> = ({ scanResult, setCurrentPage }) =>
                     textAlign: 'center',
                     marginBottom: '4px'
                   }}>
-                    {doctorName}
+                    {activeResult.reviewedBy || doctorName}
                   </div>
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Attending Clinician Signoff</span>
+                </div>
+              </div>
+
+              {/* Send Report by Email Subsystem */}
+              <div style={{
+                marginTop: '30px',
+                borderTop: '1px solid var(--border)',
+                paddingTop: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                textAlign: 'left'
+              }} className="no-print">
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  Send Report by Email
+                </span>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Enter clinician or patient email to dispatch diagnostic coordinates PDF and clinical notes.
+                </p>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="email"
+                    placeholder="physician@clinic.org"
+                    value={emailAddress}
+                    onChange={(e) => setEmailAddress(e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-subtle)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.825rem',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    onClick={handleSendReportEmail}
+                    disabled={emailLoading}
+                    className="btn btn-primary"
+                    style={{ padding: '10px 20px', borderRadius: '8px', fontSize: '0.825rem', fontWeight: 700 }}
+                  >
+                    {emailLoading ? 'Sending...' : 'Send Report'}
+                  </button>
                 </div>
               </div>
 

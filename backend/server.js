@@ -8,6 +8,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const scanRoutes = require('./routes/scanRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -36,8 +38,25 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Global Security Middleware
-app.use(helmet());
-app.use(cors()); // Allow cross-origin requests (React development config)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://*.roboflow.com", "https://serverless.roboflow.com"],
+      connectSrc: ["'self'", "https://*.roboflow.com", "https://serverless.roboflow.com"]
+    }
+  }
+}));
+
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : 'http://localhost:5173',
+  optionsSuccessStatus: 200,
+  credentials: true
+};
+app.use(cors(corsOptions));
 app.use(morgan('dev')); // Dev level HTTP request logs
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -90,6 +109,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/scans', scanRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/email', emailRoutes);
 
 // Wildcard fallback for client-side routing in production
 if (config.nodeEnv === 'production') {
@@ -111,11 +132,15 @@ app.use((req, res, next) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(config.port, () => {
-  logger.info(`NeuroScan AI backend running in [${config.nodeEnv}] on port: ${config.port}`);
-  if (config.isRoboflowConfigured()) {
-    logger.info('Roboflow AI active classification integration verified.');
-  } else {
-    logger.warn('Running in Offline Simulation Mode (Mock predictions fallback active).');
-  }
-});
+if (require.main === module) {
+  app.listen(config.port, () => {
+    logger.info(`NeuroScan AI backend running in [${config.nodeEnv}] on port: ${config.port}`);
+    if (config.isRoboflowConfigured()) {
+      logger.info('Roboflow AI active classification integration verified.');
+    } else {
+      logger.warn('Running in Offline Simulation Mode (Mock predictions fallback active).');
+    }
+  });
+}
+
+module.exports = app;
