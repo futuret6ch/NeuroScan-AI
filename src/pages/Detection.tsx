@@ -835,6 +835,62 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
               </div>
             </div>
 
+            {/* Process Flow Stepper Indicator */}
+            <div className="card animate-fade-in" style={{ 
+              background: 'var(--bg-card)', 
+              padding: '16px 24px', 
+              borderRadius: '16px',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '16px',
+              marginTop: '-10px'
+            }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                Analysis Lifecycle:
+              </span>
+              <div style={{ 
+                display: 'flex', 
+                gap: '20px', 
+                alignItems: 'center', 
+                flexWrap: 'wrap'
+              }}>
+                {['Uploading...', 'Analyzing...', 'Receiving Results...', 'Complete'].map((step, idx) => {
+                  const isCurrent = step === 'Complete';
+                  const isPast = step !== 'Complete';
+                  return (
+                    <div key={idx} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px',
+                      fontSize: '0.825rem',
+                      fontWeight: 700,
+                      color: isCurrent ? 'var(--primary)' : 'var(--success)'
+                    }}>
+                      <span style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        width: '22px', 
+                        height: '22px', 
+                        borderRadius: '50%', 
+                        fontSize: '0.75rem',
+                        border: `2px solid ${isCurrent ? 'var(--primary)' : 'var(--success)'}`,
+                        background: isCurrent ? 'rgba(99, 102, 241, 0.1)' : 'rgba(52, 211, 153, 0.1)',
+                        color: isCurrent ? 'var(--primary)' : 'var(--success)'
+                      }}>
+                        {isPast ? '✓' : idx + 1}
+                      </span>
+                      <span>{step}</span>
+                      {idx < 3 && <span style={{ color: 'var(--border)', opacity: 0.5 }}>→</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Two-Column Midsection: Viewer and Verdicts */}
             <div style={{
               display: 'grid',
