@@ -11,8 +11,10 @@ const config = {
   isRoboflowConfigured: () => {
     const key = process.env.ROBOFLOW_API_KEY;
     const url = process.env.ROBOFLOW_WORKFLOW_URL;
-    return key && key !== '' && key !== 'YOUR_API_KEY_HERE' && key !== 'YOUR_API_KEY' &&
-           url && url !== '' && url !== 'YOUR_WORKFLOW_URL_HERE' && url !== 'YOUR_WORKFLOW_URL';
+    return (
+      key && key !== '' && key !== 'YOUR_API_KEY' && key !== 'YOUR_API_KEY_HERE' &&
+      url && url !== '' && url !== 'YOUR_WORKFLOW_URL'
+    );
   }
 };
 

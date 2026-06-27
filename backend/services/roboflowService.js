@@ -11,105 +11,85 @@ const roboflowService = {
     
     // Check if Roboflow credentials are configured
     if (!config.isRoboflowConfigured()) {
-      logger.warn('Roboflow API Key or Workflow URL not configured. Invoking offline simulated inference engine.');
+      logger.warn('Roboflow API Key or Workflow URL not configured, or placeholders detected. Invoking offline simulated inference engine.');
       return simulateInference(fileName);
     }
 
     try {
-      logger.info(`Sending image to Roboflow Workflow URL: ${config.roboflow.workflowUrl}`);
+      const url = config.roboflow.workflowUrl;
       
-      const payload = {
-        api_key: config.roboflow.apiKey,
-        inputs: {
-          image: {
-            type: 'base64',
-            value: base64Image
-          }
-        }
-      };
-
+      logger.info(`Sending image to Roboflow Hosted Workflows API: ${url}`);
+      
       const response = await axios({
         method: 'POST',
-        url: config.roboflow.workflowUrl,
-        data: payload,
+        url: url,
+        data: {
+          api_key: config.roboflow.apiKey,
+          inputs: {
+            image: {
+              type: 'base64',
+              value: base64Image
+            }
+          }
+        },
         headers: {
           'Content-Type': 'application/json'
         },
-        timeout: 12000 // 12-second timeout handling
+        timeout: 15000 // 15-second timeout handling
       });
 
-      logger.info('Roboflow prediction response received successfully.');
+      logger.info('Roboflow workflow prediction response received successfully.');
       return parseRoboflowResponse(response.data);
       
     } catch (error) {
-      logger.error('Roboflow API inference failed:', error);
+      logger.error('Roboflow Workflow API inference failed:', error);
       
-      // Handle timeout or network failure by returning fallback error message
+      // Handle timeout or network failure by returning fallback diagnostic
       if (error.code === 'ECONNABORTED') {
         throw new Error('Roboflow API connection timed out. Please try again.');
       }
       
-      throw new Error(error.response?.data?.message || 'Error communicating with Roboflow AI engine.');
+      throw new Error(error.response?.data?.message || 'Error communicating with Roboflow Hosted Workflows API.');
     }
   }
 };
 
 /**
- * Parse standard Roboflow object detection or workflow response payload
+ * Parse standard Roboflow object detection response payload
  */
 function parseRoboflowResponse(data) {
   let predictions = [];
-  let imageWidth = 512;
-  let imageHeight = 512;
-
-  // Search for image width and height info
-  if (data.image && data.image.width) {
-    imageWidth = data.image.width;
-    imageHeight = data.image.height;
-  }
-
-  // Gracefully extract predictions from standard or workflow response payload structures
-  if (data.predictions && Array.isArray(data.predictions)) {
-    predictions = data.predictions;
-  } else if (data.outputs) {
+  
+  if (data && data.outputs) {
     if (Array.isArray(data.outputs)) {
-      const outputObj = data.outputs[0] || {};
-      predictions = outputObj.predictions || outputObj.detections || outputObj.output || [];
-      if (outputObj.image) {
-        imageWidth = outputObj.image.width || imageWidth;
-        imageHeight = outputObj.image.height || imageHeight;
+      for (const output of data.outputs) {
+        if (output && output.predictions) {
+          predictions = output.predictions;
+          break;
+        }
       }
-    } else {
-      predictions = data.outputs.predictions || data.outputs.detections || data.outputs.output || [];
-      if (data.outputs.image) {
-        imageWidth = data.outputs.image.width || imageWidth;
-        imageHeight = data.outputs.image.height || imageHeight;
-      }
-    }
-  }
-
-  // Fallback: search key-values inside outputs object
-  if (predictions.length === 0 && data.outputs && typeof data.outputs === 'object' && !Array.isArray(data.outputs)) {
-    for (const key of Object.keys(data.outputs)) {
-      const val = data.outputs[key];
-      if (val && typeof val === 'object') {
-        if (val.predictions && Array.isArray(val.predictions)) {
-          predictions = val.predictions;
-          if (val.image) {
-            imageWidth = val.image.width || imageWidth;
-            imageHeight = val.image.height || imageHeight;
+    } else if (typeof data.outputs === 'object') {
+      if (data.outputs.predictions) {
+        predictions = data.outputs.predictions;
+      } else {
+        // Fallback to searching all keys
+        for (const key of Object.keys(data.outputs)) {
+          const val = data.outputs[key];
+          if (val && Array.isArray(val.predictions)) {
+            predictions = val.predictions;
+            break;
+          } else if (val && Array.isArray(val)) {
+            predictions = val;
+            break;
           }
-          break;
-        }
-        if (Array.isArray(val)) {
-          predictions = val;
-          break;
         }
       }
     }
+  } else if (data && data.predictions) {
+    predictions = data.predictions;
   }
-
-  if (predictions.length === 0) {
+  
+  if (!predictions || predictions.length === 0) {
     // Healthy brain response
     return {
       hasTumor: false,
@@ -128,20 +108,31 @@ function parseRoboflowResponse(data) {
 
   // Find the highest confidence prediction (in case model detects multiple classes)
   const topPrediction = predictions.reduce((prev, current) => {
-    return (prev.confidence > current.confidence) ? prev : current;
+    const prevConf = prev.confidence !== undefined ? prev.confidence : 0;
+    const currentConf = current.confidence !== undefined ? current.confidence : 0;
+    return (prevConf > currentConf) ? prev : current;
   });
 
-  const rawConfidence = topPrediction.confidence * 100;
+  const rawConfidence = (topPrediction.confidence !== undefined ? topPrediction.confidence : 0.99) * (topPrediction.confidence <= 1 ? 100 : 1);
   const confidence = Number(rawConfidence.toFixed(1));
-  const className = topPrediction.class;
+  const className = topPrediction.class || 'Tumor';
 
   // Map coordinates (Roboflow returns center coordinates + width + height)
   // We translate it to our frontend circle locator: {x, y, r}
   // Standard Roboflow coordinates are relative to the image size (usually 512x512)
   // We normalize this to percentages (0-100) for our responsive HTML viewer.
-  const pctX = Number(((topPrediction.x / imageWidth) * 100).toFixed(1));
-  const pctY = Number(((topPrediction.y / imageHeight) * 100).toFixed(1));
-  const maxDim = Math.max(topPrediction.width, topPrediction.height);
+  // For coordinates, we divide by image width/height. Assuming square 512x512 standard or parsing from response.
+  const imageWidth = data.image?.width || 512;
+  const imageHeight = data.image?.height || 512;
+
+  const px = topPrediction.x !== undefined ? topPrediction.x : (imageWidth / 2);
+  const py = topPrediction.y !== undefined ? topPrediction.y : (imageHeight / 2);
+  const pw = topPrediction.width !== undefined ? topPrediction.width : 50;
+  const ph = topPrediction.height !== undefined ? topPrediction.height : 50;
+
+  const pctX = Number(((px / imageWidth) * 100).toFixed(1));
+  const pctY = Number(((py / imageHeight) * 100).toFixed(1));
+  const maxDim = Math.max(pw, ph);
   const pctR = Number(((maxDim / Math.max(imageWidth, imageHeight)) * 20).toFixed(1)); // scaled radius indicator
 
   const hasTumor = true;
