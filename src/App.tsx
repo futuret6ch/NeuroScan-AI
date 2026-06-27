@@ -50,7 +50,7 @@ function App() {
       case 'home':
         return <Home setCurrentPage={setCurrentPage} />;
       case 'detection':
-        return <Detection onScanComplete={handleScanComplete} />;
+        return <Detection onScanComplete={handleScanComplete} setCurrentPage={setCurrentPage} />;
       case 'report':
         return <Report scanResult={scanResult} />;
       case 'about':
