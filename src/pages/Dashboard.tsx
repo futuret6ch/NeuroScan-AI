@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  User, Activity, Calendar, Clock, Bell, CheckCircle2, AlertTriangle, 
-  Search, Trash2, Eye, Printer, Filter, Brain, Shield, Award, Heart 
+  User, Activity, Calendar, Clock, Bell, AlertTriangle, 
+  Search, Trash2, Eye, Printer, Brain, Shield, Award,
+  History as HistoryIcon, AlertCircle
 } from 'lucide-react';
 
 interface ScanResult {
@@ -326,24 +327,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectReport, setCurrent
           {/* QUICK STATISTICS GRID */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '20px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '16px',
+            flex: 1.5
           }}>
-            <div className="card" style={{ padding: '18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total MRI Scans</span>
-              <h2 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary)', margin: 0 }}>{totalScans}</h2>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Total MRI Scans</span>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary)', margin: 0 }}>{totalScans}</h2>
             </div>
-            <div className="card" style={{ padding: '18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Tumors Detected</span>
-              <h2 style={{ fontSize: '2rem', fontWeight: 900, color: tumorsDetected > 0 ? 'var(--error)' : 'var(--text-primary)', margin: 0 }}>{tumorsDetected}</h2>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Tumors Detected</span>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: tumorsDetected > 0 ? 'var(--error)' : 'var(--text-primary)', margin: 0 }}>{tumorsDetected}</h2>
             </div>
-            <div className="card" style={{ padding: '18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Healthy Brains</span>
-              <h2 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--success)', margin: 0 }}>{healthyReports}</h2>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Healthy Reports</span>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--success)', margin: 0 }}>{healthyReports}</h2>
             </div>
-            <div className="card" style={{ padding: '18px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Avg AI Accuracy</span>
-              <h2 style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--accent)', margin: 0 }}>{averageConfidence}%</h2>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Reports Generated</span>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary)', margin: 0 }}>{totalScans}</h2>
+            </div>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Avg Confidence</span>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--accent)', margin: 0 }}>{averageConfidence}%</h2>
+            </div>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'space-between', textAlign: 'left' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Recent Scan Date</span>
+              <h2 style={{ fontSize: '1rem', fontWeight: 900, color: 'var(--text-primary)', margin: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={mostRecentScanDate}>{mostRecentScanDate}</h2>
             </div>
           </div>
         </div>
@@ -395,7 +405,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectReport, setCurrent
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <History style={{ color: 'var(--primary)' }} />
+              <HistoryIcon style={{ color: 'var(--primary)' }} />
               MRI Ingestion & Scan History Log
             </h3>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
