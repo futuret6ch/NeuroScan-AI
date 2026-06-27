@@ -11,26 +11,31 @@ const roboflowService = {
     
     // Check if Roboflow credentials are configured
     if (!config.isRoboflowConfigured()) {
-      logger.warn('Roboflow API Key not configured or placeholder detected. Invoking offline simulated inference engine.');
+      logger.warn('Roboflow API Key or Workflow URL not configured. Invoking offline simulated inference engine.');
       return simulateInference(fileName);
     }
 
     try {
-      const url = `https://detect.roboflow.com/${config.roboflow.modelId}/${config.roboflow.version}`;
+      logger.info(`Sending image to Roboflow Workflow URL: ${config.roboflow.workflowUrl}`);
       
-      logger.info(`Sending image to Roboflow serverless endpoint: ${url}`);
-      
+      const payload = {
+        api_key: config.roboflow.apiKey,
+        inputs: {
+          image: {
+            type: 'base64',
+            value: base64Image
+          }
+        }
+      };
+
       const response = await axios({
         method: 'POST',
-        url: url,
-        params: {
-          api_key: config.roboflow.apiKey
-        },
-        data: base64Image,
+        url: config.roboflow.workflowUrl,
+        data: payload,
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         },
-        timeout: 8000 // 8-second timeout handling
+        timeout: 12000 // 12-second timeout handling
       });
 
       logger.info('Roboflow prediction response received successfully.');
@@ -39,7 +44,7 @@ const roboflowService = {
     } catch (error) {
       logger.error('Roboflow API inference failed:', error);
       
-      // Handle timeout or network failure by returning fallback diagnostic (for test resilience)
+      // Handle timeout or network failure by returning fallback error message
       if (error.code === 'ECONNABORTED') {
         throw new Error('Roboflow API connection timed out. Please try again.');
       }
@@ -50,11 +55,60 @@ const roboflowService = {
 };
 
 /**
- * Parse standard Roboflow object detection response payload
+ * Parse standard Roboflow object detection or workflow response payload
  */
 function parseRoboflowResponse(data) {
-  const predictions = data.predictions || [];
-  
+  let predictions = [];
+  let imageWidth = 512;
+  let imageHeight = 512;
+
+  // Search for image width and height info
+  if (data.image && data.image.width) {
+    imageWidth = data.image.width;
+    imageHeight = data.image.height;
+  }
+
+  // Gracefully extract predictions from standard or workflow response payload structures
+  if (data.predictions && Array.isArray(data.predictions)) {
+    predictions = data.predictions;
+  } else if (data.outputs) {
+    if (Array.isArray(data.outputs)) {
+      const outputObj = data.outputs[0] || {};
+      predictions = outputObj.predictions || outputObj.detections || outputObj.output || [];
+      if (outputObj.image) {
+        imageWidth = outputObj.image.width || imageWidth;
+        imageHeight = outputObj.image.height || imageHeight;
+      }
+    } else {
+      predictions = data.outputs.predictions || data.outputs.detections || data.outputs.output || [];
+      if (data.outputs.image) {
+        imageWidth = data.outputs.image.width || imageWidth;
+        imageHeight = data.outputs.image.height || imageHeight;
+      }
+    }
+  }
+
+  // Fallback: search key-values inside outputs object
+  if (predictions.length === 0 && data.outputs && typeof data.outputs === 'object' && !Array.isArray(data.outputs)) {
+    for (const key of Object.keys(data.outputs)) {
+      const val = data.outputs[key];
+      if (val && typeof val === 'object') {
+        if (val.predictions && Array.isArray(val.predictions)) {
+          predictions = val.predictions;
+          if (val.image) {
+            imageWidth = val.image.width || imageWidth;
+            imageHeight = val.image.height || imageHeight;
+          }
+          break;
+        }
+        if (Array.isArray(val)) {
+          predictions = val;
+          break;
+        }
+      }
+    }
+  }
+
   if (predictions.length === 0) {
     // Healthy brain response
     return {
@@ -85,10 +139,6 @@ function parseRoboflowResponse(data) {
   // We translate it to our frontend circle locator: {x, y, r}
   // Standard Roboflow coordinates are relative to the image size (usually 512x512)
   // We normalize this to percentages (0-100) for our responsive HTML viewer.
-  // For coordinates, we divide by image width/height. Assuming square 512x512 standard or parsing from response.
-  const imageWidth = data.image?.width || 512;
-  const imageHeight = data.image?.height || 512;
-
   const pctX = Number(((topPrediction.x / imageWidth) * 100).toFixed(1));
   const pctY = Number(((topPrediction.y / imageHeight) * 100).toFixed(1));
   const maxDim = Math.max(topPrediction.width, topPrediction.height);
