@@ -257,12 +257,6 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     setProgress(0);
   };
 
-  const loggerError = (msg: string) => {
-    setActiveLog('Error');
-    setAnalysisLogs((prev) => [...prev, `[FAIL] ${msg}`]);
-    triggerErrorCard('Server Error', msg);
-  };
-
   const uploadAndAnalyzeMRI = (fileToUpload: File) => {
     setErrorDetails(null);
     setAnalysisStatus('analyzing');
