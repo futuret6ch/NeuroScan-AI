@@ -351,6 +351,11 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     uploadAndAnalyzeMRI(selectedFile);
   };
 
+  const handleRetryAnalysis = () => {
+    if (!selectedFile) return;
+    uploadAndAnalyzeMRI(selectedFile);
+  };
+
   const handleViewReport = () => {
     if (scanResult) {
       onScanComplete({
