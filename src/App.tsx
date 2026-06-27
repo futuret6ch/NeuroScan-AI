@@ -52,7 +52,7 @@ function App() {
       case 'detection':
         return <Detection onScanComplete={handleScanComplete} setCurrentPage={setCurrentPage} />;
       case 'report':
-        return <Report scanResult={scanResult} />;
+        return <Report scanResult={scanResult} setCurrentPage={setCurrentPage} />;
       case 'about':
         return <About />;
       case 'contact':
