@@ -5,6 +5,7 @@ import { Detection } from './pages/Detection';
 import { Report } from './pages/Report';
 import { About } from './pages/About';
 import { Contact } from './pages/Contact';
+import { Dashboard } from './pages/Dashboard';
 
 interface ScanResult {
   hasTumor: boolean;
@@ -15,12 +16,33 @@ interface ScanResult {
   findings: string;
   imgUrl?: string;
   name?: string;
+  
+  // Custom metadata fields saved in history
+  date?: string;
+  time?: string;
+  patientName?: string;
+  patientAge?: string;
+  patientGender?: string;
+  doctorName?: string;
+  hospitalName?: string;
+  scanId?: string;
+  duration?: string;
+  resolution?: string;
+  model?: string;
+  dataset?: string;
+  engine?: string;
+  symptoms?: string;
+  nextStep?: string;
+  specialist?: string;
+  description?: string;
+  riskLevel?: 'Low' | 'Medium' | 'High';
+  fileName?: string;
+  fileSize?: string;
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<string>('home');
+  const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    // Check local storage or prefers-color-scheme
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) {
       return savedTheme === 'dark';
@@ -45,8 +67,15 @@ function App() {
     setCurrentPage('report');
   };
 
+  const handleSelectReport = (result: ScanResult) => {
+    setScanResult(result);
+    setCurrentPage('report');
+  };
+
   const renderPage = () => {
     switch (currentPage) {
+      case 'dashboard':
+        return <Dashboard onSelectReport={handleSelectReport} setCurrentPage={setCurrentPage} />;
       case 'home':
         return <Home setCurrentPage={setCurrentPage} />;
       case 'detection':
@@ -58,7 +87,7 @@ function App() {
       case 'contact':
         return <Contact />;
       default:
-        return <Home setCurrentPage={setCurrentPage} />;
+        return <Dashboard onSelectReport={handleSelectReport} setCurrentPage={setCurrentPage} />;
     }
   };
 
