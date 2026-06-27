@@ -4,13 +4,30 @@ const morgan = require('morgan');
 const config = require('./config/config');
 const logger = require('./utils/logger');
 const analyzeRoutes = require('./routes/analyzeRoutes');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const scanRoutes = require('./routes/scanRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+
+// Optional JWT parser for demo ingestion mapping
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET || 'neuroscan-super-secret-key-999');
+    } catch (e) {}
+  }
+  next();
+};
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -68,7 +85,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // Main routes mapping
-app.use('/api', analyzeRoutes);
+app.use('/api', optionalAuth, analyzeRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/scans', scanRoutes);
 
 // Wildcard fallback for client-side routing in production
 if (config.nodeEnv === 'production') {
