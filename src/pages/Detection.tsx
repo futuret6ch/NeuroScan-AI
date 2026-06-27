@@ -21,6 +21,10 @@ interface ScanResult {
   nextStep: string;
   specialist: string;
   description: string;
+  status?: string;
+  tumorDetected?: boolean;
+  tumorType?: string;
+  analysisTime?: string;
 }
 
 interface DetectionProps {
