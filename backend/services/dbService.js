@@ -3,7 +3,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 
 // Database file path for local JSON fallback
-const DB_DIR = path.join(__dirname, '../data');
+const DB_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, '../data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 
 class DatabaseService {
@@ -35,8 +35,13 @@ class DatabaseService {
   }
 
   setupFileDatabase() {
+    this.inMemoryDb = null;
     if (!fs.existsSync(DB_DIR)) {
-      fs.mkdirSync(DB_DIR, { recursive: true });
+      try {
+        fs.mkdirSync(DB_DIR, { recursive: true });
+      } catch (e) {
+        console.warn('[WARN] - Could not create DB directory:', e.message);
+      }
     }
 
     if (!fs.existsSync(DB_FILE)) {
@@ -122,30 +127,43 @@ class DatabaseService {
         }
       ];
 
-      fs.writeFileSync(DB_FILE, JSON.stringify({ users: defaultUsers, scans: defaultScans }, null, 2), 'utf8');
-      console.log('[INFO] - Initialized and seeded local file-based database.');
+      try {
+        fs.writeFileSync(DB_FILE, JSON.stringify({ users: defaultUsers, scans: defaultScans, appointments: [] }, null, 2), 'utf8');
+        console.log('[INFO] - Initialized and seeded local file-based database.');
+      } catch (e) {
+        console.warn('[WARN] - Failed to write database file. Storing initial database seed in memory fallback.', e.message);
+        this.inMemoryDb = { users: defaultUsers, scans: defaultScans, appointments: [] };
+      }
     }
   }
 
   // Read data helper
   _readData() {
+    if (this.inMemoryDb) {
+      return this.inMemoryDb;
+    }
     try {
       const content = fs.readFileSync(DB_FILE, 'utf8');
       const data = JSON.parse(content);
       if (!data.appointments) data.appointments = [];
+      this.inMemoryDb = data;
       return data;
     } catch (e) {
-      return { users: [], scans: [], appointments: [] };
+      if (!this.inMemoryDb) {
+        this.inMemoryDb = { users: [], scans: [], appointments: [] };
+      }
+      return this.inMemoryDb;
     }
   }
 
   // Write data helper
   _writeData(data) {
+    this.inMemoryDb = data;
     try {
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
       return true;
     } catch (e) {
-      console.error('[ERROR] - Failed to write to database file.', e);
+      console.warn('[WARN] - Failed to write database file. Storing data in memory cache.', e.message);
       return false;
     }
   }

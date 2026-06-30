@@ -32,9 +32,13 @@ const optionalAuth = (req, res, next) => {
 };
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = process.env.VERCEL ? '/tmp' : path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  } catch (e) {
+    console.warn('[WARN] - Could not create uploads directory:', e.message);
+  }
 }
 
 // Global Security Middleware
@@ -111,6 +115,81 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/scans', scanRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/email', emailRoutes);
+
+// --- VERCEL REQUIRED COMPATIBILITY ROUTES ---
+
+// 1. /api/scan/upload (POST)
+app.post('/api/scan/upload', optionalAuth, (req, res) => {
+  const uploadMiddleware = require('./middleware/upload');
+  uploadMiddleware.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, error: err.message || 'File upload failed.', message: err.message || 'File upload failed.' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Please upload an MRI image file.', message: 'Please upload an MRI image file.' });
+    }
+    const imgUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    return res.status(200).json({
+      success: true,
+      message: 'Image uploaded successfully.',
+      data: {
+        fileName: req.file.originalname,
+        fileSize: `${(req.file.size / (1024 * 1024)).toFixed(2)} MB`,
+        imgUrl
+      }
+    });
+  });
+});
+
+// 2. /api/scan/analyze (POST)
+const analyzeController = require('./controllers/analyzeController');
+const uploadMiddleware = require('./middleware/upload');
+app.post('/api/scan/analyze', optionalAuth, uploadMiddleware.single('image'), analyzeController.analyzeMRI);
+
+// 3. /api/report/generate (POST)
+const dbService = require('./services/dbService');
+app.post('/api/report/generate', optionalAuth, async (req, res) => {
+  try {
+    const { patientName, patientAge, patientGender, hasTumor, type, confidence, findings, recommendation, riskLevel, imgUrl } = req.body;
+    const scanRecord = {
+      userId: req.user ? req.user.id : 'u1',
+      patientName: patientName || 'Eleanor Vance',
+      patientAge: patientAge || '38',
+      patientGender: patientGender || 'Female',
+      hasTumor: hasTumor !== undefined ? hasTumor : true,
+      type: type || 'Glioma (Malignant)',
+      confidence: confidence ? Number(confidence) : 95.0,
+      findings: findings || 'Visualized mass lesion with vasogenic edema.',
+      recommendation: recommendation || 'Urgent neurosurgical consultation advised.',
+      riskLevel: riskLevel || 'High',
+      imgUrl: imgUrl || '',
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    };
+    const savedScan = await dbService.saveScan(scanRecord);
+    return res.status(200).json({
+      success: true,
+      message: 'Medical report generated successfully.',
+      data: savedScan
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error.', message: err.message || 'Internal server error.' });
+  }
+});
+
+// 4. /api/report/history (GET)
+const { requireAuth } = require('./middleware/authMiddleware');
+const scanController = require('./controllers/scanController');
+app.get('/api/report/history', requireAuth, scanController.getScans);
+
+// 5. /api/auth/profile (GET)
+const userController = require('./controllers/userController');
+app.get('/api/auth/profile', requireAuth, userController.getProfile);
+
+// 6. /api/user/profile (GET/PUT/DELETE)
+app.get('/api/user/profile', requireAuth, userController.getProfile);
+app.put('/api/user/profile', requireAuth, userController.updateProfile);
+app.delete('/api/user/profile', requireAuth, userController.deleteAccount);
 
 // Wildcard fallback for client-side routing in production
 if (config.nodeEnv === 'production') {

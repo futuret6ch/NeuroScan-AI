@@ -393,7 +393,7 @@ export const Detection: React.FC<DetectionProps> = ({ onScanComplete, setCurrent
     });
 
     // Send multipart POST request to Vite proxy endpoint
-    xhr.open('POST', '/api/analyze');
+    xhr.open('POST', '/api/scan/analyze');
     const token = localStorage.getItem('neuroscan_token');
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
