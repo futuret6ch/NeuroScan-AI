@@ -189,6 +189,7 @@ app.get('/api/auth/profile', requireAuth, userController.getProfile);
 // 6. /api/user/profile (GET/PUT/DELETE)
 app.get('/api/user/profile', requireAuth, userController.getProfile);
 app.put('/api/user/profile', requireAuth, userController.updateProfile);
+app.put('/api/user/profile/password', requireAuth, userController.changePassword);
 app.delete('/api/user/profile', requireAuth, userController.deleteAccount);
 
 // Wildcard fallback for client-side routing in production

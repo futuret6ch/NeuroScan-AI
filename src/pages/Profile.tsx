@@ -84,7 +84,7 @@ export const Profile: React.FC<ProfileProps> = ({
         payload.hospital = hospital;
       }
 
-      const response = await fetch('/api/users/profile', {
+      const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -115,7 +115,7 @@ export const Profile: React.FC<ProfileProps> = ({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/users/profile/password', {
+      const response = await fetch('/api/user/profile/password', {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ export const Profile: React.FC<ProfileProps> = ({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/users/profile', {
+      const response = await fetch('/api/user/profile', {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
