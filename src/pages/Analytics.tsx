@@ -79,7 +79,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ token }) => {
       }
 
       // Fetch scan history logs
-      const scanRes = await fetch('/api/scans', {
+      const scanRes = await fetch('/api/report/history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const scanData = await scanRes.json();
